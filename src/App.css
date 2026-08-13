@@ -1,8 +1,9 @@
 /* iLO Dashboard — component styles */
 
 .app {
-  max-width: 1360px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 0 28px 56px;
   display: flex;
   flex-direction: column;
