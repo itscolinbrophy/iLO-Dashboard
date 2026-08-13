@@ -1,7 +1,19 @@
-import type { IloEndpoint, TelemetryMap, TelemetrySuccess } from '../types/ilo';
+import type {
+  IloEndpoint,
+  TelemetryMap,
+  TelemetrySuccess,
+  EventLogEntry,
+  HistorySample,
+} from '../types/ilo';
 import { HealthBadge } from './HealthBadge';
 import { groupTemperatures, type TempGroup } from '../utils/tempGroups';
-import { setFanSpeed, resetFanControl } from '../api/client';
+import {
+  setFanSpeed,
+  resetFanControl,
+  sendPowerAction,
+  fetchEventLog,
+  fetchHistory,
+} from '../api/client';
 import { useState } from 'react';
 
 interface TelemetryDashboardProps {
@@ -169,6 +181,78 @@ function SystemCard({
     }
   };
 
+  // Power control.
+  const [powerBusy, setPowerBusy] = useState(false);
+  const [powerMsg, setPowerMsg] = useState<string | null>(null);
+
+  const handlePower = async (action: string) => {
+    const labels: Record<string, string> = {
+      On: 'Power On',
+      ForceOff: 'Force Off',
+      GracefulShutdown: 'Shutdown',
+      GracefulRestart: 'Restart',
+      ForceRestart: 'Force Restart',
+    };
+    if (!window.confirm(`${labels[action] ?? action} ${endpoint.name}?`)) return;
+    setPowerBusy(true);
+    setPowerMsg(null);
+    try {
+      const res = await sendPowerAction(endpoint.id, action);
+      setPowerMsg(res.ok ? `${labels[action] ?? action} sent` : res.error ?? 'Failed');
+    } catch (err) {
+      setPowerMsg(err instanceof Error ? err.message : 'Failed to send power action');
+    } finally {
+      setPowerBusy(false);
+    }
+  };
+
+  // Event log.
+  const [events, setEvents] = useState<EventLogEntry[] | null>(null);
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [eventsBusy, setEventsBusy] = useState(false);
+  const [eventsMsg, setEventsMsg] = useState<string | null>(null);
+
+  const handleToggleEvents = async () => {
+    if (eventsOpen) {
+      setEventsOpen(false);
+      return;
+    }
+    setEventsOpen(true);
+    setEventsBusy(true);
+    setEventsMsg(null);
+    try {
+      const res = await fetchEventLog(endpoint.id);
+      if (res.ok) setEvents(res.entries);
+      else setEventsMsg(res.error ?? 'Failed to load event log');
+    } catch (err) {
+      setEventsMsg(err instanceof Error ? err.message : 'Failed to load event log');
+    } finally {
+      setEventsBusy(false);
+    }
+  };
+
+  // History.
+  const [history, setHistory] = useState<HistorySample[] | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
+
+  const handleToggleHistory = async () => {
+    if (historyOpen) {
+      setHistoryOpen(false);
+      return;
+    }
+    setHistoryOpen(true);
+    setHistoryBusy(true);
+    try {
+      const res = await fetchHistory(endpoint.id);
+      if (res.ok) setHistory(res.samples);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
+
   return (
     <div className="system-card">
       <div className="card-header">
@@ -207,6 +291,94 @@ function SystemCard({
           value={data.latencyMs != null ? `${data.latencyMs} ms` : '—'}
         />
       </div>
+
+      <div className="card-toolbar">
+        <div className="power-control">
+          <button
+            className="btn"
+            onClick={() => handlePower('On')}
+            disabled={powerBusy}
+            title="Power on"
+          >
+            ⏻ On
+          </button>
+          <button
+            className="btn"
+            onClick={() => handlePower('GracefulRestart')}
+            disabled={powerBusy}
+            title="Graceful restart"
+          >
+            ↻ Restart
+          </button>
+          <button
+            className="btn danger"
+            onClick={() => handlePower('ForceOff')}
+            disabled={powerBusy}
+            title="Force off"
+          >
+            ⏻ Off
+          </button>
+          <button
+            className="btn"
+            onClick={handleToggleEvents}
+            disabled={eventsBusy}
+            title="View iLO event log"
+          >
+            {eventsOpen ? 'Hide Events' : 'Events'}
+          </button>
+          <button
+            className="btn"
+            onClick={handleToggleHistory}
+            disabled={historyBusy}
+            title="View history chart"
+          >
+            {historyOpen ? 'Hide History' : 'History'}
+          </button>
+        </div>
+        {powerMsg && <div className="card-msg">{powerMsg}</div>}
+      </div>
+
+      {eventsOpen && (
+        <div className="sensor-section">
+          <h4>Event Log</h4>
+          {eventsBusy ? (
+            <p className="empty-hint">Loading…</p>
+          ) : eventsMsg ? (
+            <p className="card-error">{eventsMsg}</p>
+          ) : events && events.length > 0 ? (
+            <ul className="event-list">
+              {events.slice(0, 20).map((ev, i) => (
+                <li key={i} className={`event-item sev-${ev.severity.toLowerCase()}`}>
+                  <span className="event-severity">{ev.severity}</span>
+                  <span className="event-message">{ev.message}</span>
+                  {ev.timestamp && (
+                    <span className="event-time">
+                      {new Date(ev.timestamp).toLocaleString()}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="empty-hint">No events found.</p>
+          )}
+        </div>
+      )}
+
+      {historyOpen && (
+        <div className="sensor-section">
+          <h4>History</h4>
+          {historyBusy ? (
+            <p className="empty-hint">Loading…</p>
+          ) : history && history.length > 1 ? (
+            <HistoryChart samples={history} />
+          ) : (
+            <p className="empty-hint">
+              Not enough history yet. Keep the dashboard polling to collect samples.
+            </p>
+          )}
+        </div>
+      )}
 
       {groups.length > 0 && (
         <div className="sensor-section">
@@ -331,6 +503,54 @@ function Kpi({ label, value }: { label: string; value: string }) {
     <div className="kpi">
       <div className="kpi-value">{value}</div>
       <div className="kpi-label">{label}</div>
+    </div>
+  );
+}
+
+/** Simple SVG line chart for historical telemetry. */
+function HistoryChart({ samples }: { samples: HistorySample[] }) {
+  const width = 320;
+  const height = 90;
+  const pad = 4;
+
+  const maxTemp = Math.max(...samples.map((s) => s.maxTemp), 1);
+  const maxPower = Math.max(...samples.map((s) => s.powerWatts), 1);
+
+  const points = (key: 'maxTemp' | 'powerWatts', max: number) =>
+    samples
+      .map((s, i) => {
+        const x = pad + (i / Math.max(samples.length - 1, 1)) * (width - pad * 2);
+        const y = height - pad - (s[key] / max) * (height - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+
+  return (
+    <div className="history-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} className="history-svg">
+        <polyline
+          points={points('maxTemp', maxTemp)}
+          fill="none"
+          stroke="var(--crit)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <polyline
+          points={points('powerWatts', maxPower)}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <div className="history-legend">
+        <span className="legend-item">
+          <span className="legend-dot temp" /> Max Temp
+        </span>
+        <span className="legend-item">
+          <span className="legend-dot power" /> Power (W)
+        </span>
+      </div>
     </div>
   );
 }

@@ -750,6 +750,116 @@
   color: var(--text-muted);
 }
 
+/* ---------- Card toolbar (power, events, history) ---------- */
+.card-toolbar {
+  margin-bottom: 16px;
+}
+
+.power-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-msg {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Event log ---------- */
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.event-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(11, 15, 23, 0.55);
+  border-left: 3px solid var(--unknown);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12px;
+}
+
+.event-item.sev-critical,
+.event-item.sev-fatal {
+  border-left-color: var(--crit);
+}
+.event-item.sev-warning {
+  border-left-color: var(--warn);
+}
+.event-item.sev-ok,
+.event-item.sev-informational {
+  border-left-color: var(--ok);
+}
+
+.event-severity {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  min-width: 60px;
+}
+
+.event-message {
+  flex: 1;
+  color: var(--text);
+}
+
+.event-time {
+  color: var(--text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ---------- History chart ---------- */
+.history-chart {
+  background: rgba(11, 15, 23, 0.55);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.history-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.history-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+.legend-dot.temp {
+  background: var(--crit);
+}
+.legend-dot.power {
+  background: var(--accent);
+}
+
 /* ---------- Temperature groups ---------- */
 .temp-groups {
   display: grid;

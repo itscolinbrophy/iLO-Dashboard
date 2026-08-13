@@ -282,6 +282,143 @@ function redfishGet(host, redfishPath, username, password) {
   });
 }
 
+/** POST a JSON body to the iLO Redfish API using HTTP Basic auth. */
+function redfishPost(host, redfishPath, username, password, body) {
+  const { hostname, port } = parseHost(host);
+  const payload = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname,
+        port,
+        path: redfishPath,
+        method: 'POST',
+        rejectUnauthorized: false,
+        headers: {
+          Authorization:
+            'Basic ' + Buffer.from(`${username}:${password}`).toString('base64'),
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          Accept: 'application/json',
+        },
+        timeout: REDFISH_TIMEOUT_MS,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              resolve(data ? JSON.parse(data) : {});
+            } catch {
+              resolve({});
+            }
+          } else if (res.statusCode === 401) {
+            reject(new Error('Authentication failed (check username/password)'));
+          } else {
+            reject(new Error(`iLO returned HTTP ${res.statusCode}`));
+          }
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('Connection timed out')));
+    req.on('error', (err) => reject(new Error(err.message || 'Connection failed')));
+    req.write(payload);
+    req.end();
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Power control                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Send a power action to the iLO (On, ForceOff, GracefulRestart, etc.). */
+async function powerAction(endpoint, action) {
+  await redfishPost(
+    endpoint.host,
+    '/redfish/v1/Systems/1/Actions/ComputerSystem.Reset/',
+    endpoint.username,
+    endpoint.password,
+    { ResetType: action },
+  );
+  return { ok: true, action };
+}
+
+/* ------------------------------------------------------------------ */
+/* Event log                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Fetch the iLO event/IML log entries. */
+async function fetchEventLog(endpoint) {
+  const log = await redfishGet(
+    endpoint.host,
+    '/redfish/v1/Systems/1/LogServices/IML/Entries/',
+    endpoint.username,
+    endpoint.password,
+  );
+  // The Members list contains references; fetch each entry's details.
+  const refs = (log.Members ?? []).slice(0, 30);
+  const entries = [];
+  for (const ref of refs) {
+    try {
+      const detail = await redfishGet(
+        endpoint.host,
+        ref['@odata.id'],
+        endpoint.username,
+        endpoint.password,
+      );
+      entries.push({
+        id: detail.Id ?? null,
+        severity: detail.Severity ?? 'OK',
+        message: detail.Message ?? detail.MessageId ?? '',
+        timestamp: detail.Created ?? detail.Modified ?? null,
+      });
+    } catch {
+      // Skip entries that fail to load.
+    }
+  }
+  return { ok: true, entries };
+}
+
+/* ------------------------------------------------------------------ */
+/* History storage                                                     */
+/* ------------------------------------------------------------------ */
+
+const HISTORY_DIR = path.join(__dirname, 'history');
+const HISTORY_MAX = 500; // max samples kept per endpoint
+
+function historyFile(id) {
+  return path.join(HISTORY_DIR, `${id}.json`);
+}
+
+function loadHistory(id) {
+  try {
+    return JSON.parse(fs.readFileSync(historyFile(id), 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(id, samples) {
+  fs.mkdirSync(HISTORY_DIR, { recursive: true });
+  fs.writeFileSync(historyFile(id), JSON.stringify(samples));
+}
+
+/** Append a telemetry sample to the endpoint's history file. */
+function recordHistory(endpoint, telemetry) {
+  if (!telemetry || !telemetry.ok) return;
+  const samples = loadHistory(endpoint.id);
+  samples.push({
+    t: new Date().toISOString(),
+    maxTemp: telemetry.temperatures.reduce((m, x) => Math.max(m, x.readingC), 0),
+    powerWatts: telemetry.power.consumedWatts ?? 0,
+    maxFan: telemetry.fans.reduce((m, f) => Math.max(m, f.reading ?? 0), 0),
+  });
+  // Keep only the most recent samples.
+  if (samples.length > HISTORY_MAX) samples.splice(0, samples.length - HISTORY_MAX);
+  saveHistory(endpoint.id, samples);
+}
+
 /* ------------------------------------------------------------------ */
 /* Telemetry collection                                                */
 /* ------------------------------------------------------------------ */
@@ -510,9 +647,50 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/telemetry') {
       const endpoints = loadEndpoints();
       const results = await Promise.all(
-        endpoints.map(async (ep) => [ep.id, await collectTelemetry(ep)]),
+        endpoints.map(async (ep) => {
+          const telemetry = await collectTelemetry(ep);
+          recordHistory(ep, telemetry);
+          return [ep.id, telemetry];
+        }),
       );
       return sendJson(res, 200, Object.fromEntries(results));
+    }
+
+    /* ---- POST /api/endpoints/:id/power ---- */
+    if (parts[0] === 'api' && parts[1] === 'endpoints' && parts[2] && parts[3] === 'power') {
+      const endpoint = loadEndpoints().find((e) => e.id === parts[2]);
+      if (!endpoint) return sendJson(res, 404, { error: 'Endpoint not found' });
+      const body = await readBody(req);
+      const action = body.action;
+      const valid = ['On', 'ForceOff', 'GracefulShutdown', 'GracefulRestart', 'ForceRestart', 'Nmi'];
+      if (!valid.includes(action)) {
+        return sendJson(res, 400, { error: `Invalid power action. Valid: ${valid.join(', ')}` });
+      }
+      try {
+        const result = await powerAction(endpoint, action);
+        return sendJson(res, 200, result);
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message });
+      }
+    }
+
+    /* ---- GET /api/endpoints/:id/events ---- */
+    if (parts[0] === 'api' && parts[1] === 'endpoints' && parts[2] && parts[3] === 'events') {
+      const endpoint = loadEndpoints().find((e) => e.id === parts[2]);
+      if (!endpoint) return sendJson(res, 404, { error: 'Endpoint not found' });
+      try {
+        const result = await fetchEventLog(endpoint);
+        return sendJson(res, 200, result);
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message });
+      }
+    }
+
+    /* ---- GET /api/endpoints/:id/history ---- */
+    if (parts[0] === 'api' && parts[1] === 'endpoints' && parts[2] && parts[3] === 'history') {
+      const endpoint = loadEndpoints().find((e) => e.id === parts[2]);
+      if (!endpoint) return sendJson(res, 404, { error: 'Endpoint not found' });
+      return sendJson(res, 200, { ok: true, samples: loadHistory(endpoint.id) });
     }
 
     /* ---- Serve the built frontend (production) ---- */

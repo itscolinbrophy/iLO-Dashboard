@@ -107,3 +107,39 @@ export interface TestResult {
   ok: boolean;
   message: string;
 }
+
+/** Result of a power control action. */
+export interface PowerActionResult {
+  ok: boolean;
+  action?: string;
+  error?: string;
+}
+
+/** A single event log entry. */
+export interface EventLogEntry {
+  id: string | null;
+  severity: string;
+  message: string;
+  timestamp: string | null;
+}
+
+/** Result of fetching the event log. */
+export interface EventLogResult {
+  ok: boolean;
+  entries: EventLogEntry[];
+  error?: string;
+}
+
+/** A single historical telemetry sample. */
+export interface HistorySample {
+  t: string;
+  maxTemp: number;
+  powerWatts: number;
+  maxFan: number;
+}
+
+/** Result of fetching history. */
+export interface HistoryResult {
+  ok: boolean;
+  samples: HistorySample[];
+}

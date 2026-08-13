@@ -14,6 +14,8 @@ dist-ssr
 
 # iLO endpoint credentials (never commit)
 server/endpoints.json
+# Telemetry history cache (never commit)
+server/history/
 
 # Editor directories and files
 .vscode/*

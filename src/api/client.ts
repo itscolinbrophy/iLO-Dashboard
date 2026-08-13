@@ -4,6 +4,9 @@ import type {
   TelemetryMap,
   TestResult,
   FanControlResult,
+  PowerActionResult,
+  EventLogResult,
+  HistoryResult,
 } from '../types/ilo';
 
 const BASE = '/api';
@@ -64,4 +67,22 @@ export function resetFanControl(id: string): Promise<FanControlResult> {
     method: 'POST',
     body: JSON.stringify({ action: 'reset' }),
   });
+}
+
+/** Send a power action to an iLO (On, ForceOff, GracefulRestart, etc.). */
+export function sendPowerAction(id: string, action: string): Promise<PowerActionResult> {
+  return request(`/endpoints/${id}/power`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
+}
+
+/** Fetch the iLO event/IML log. */
+export function fetchEventLog(id: string): Promise<EventLogResult> {
+  return request(`/endpoints/${id}/events`);
+}
+
+/** Fetch historical telemetry samples for an endpoint. */
+export function fetchHistory(id: string): Promise<HistoryResult> {
+  return request(`/endpoints/${id}/history`);
 }
