@@ -196,6 +196,7 @@ function App() {
         onRefresh={refresh}
         tempColumns={tempColumns}
         tempRows={tempRows}
+        refreshInterval={refreshInterval}
       />
     </div>
   );

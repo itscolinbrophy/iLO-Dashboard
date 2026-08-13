@@ -465,6 +465,30 @@
   font-size: 13px;
 }
 
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ok);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+  animation: live-pulse 2s infinite;
+}
+
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
 .telemetry-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));

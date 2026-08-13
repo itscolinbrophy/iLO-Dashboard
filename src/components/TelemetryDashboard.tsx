@@ -11,6 +11,7 @@ interface TelemetryDashboardProps {
   onRefresh: () => void;
   tempColumns: number;
   tempRows: number;
+  refreshInterval: number | null;
 }
 
 /** Live telemetry view: temps, fans, power draw and system health per endpoint. */
@@ -22,16 +23,26 @@ export function TelemetryDashboard({
   onRefresh,
   tempColumns,
   tempRows,
+  refreshInterval,
 }: TelemetryDashboardProps) {
+  const isLive = refreshInterval === 0;
+
   return (
     <div className="panel">
       <div className="panel-header">
         <h2>Live Telemetry</h2>
         <div className="telemetry-controls">
-          {lastUpdated && (
-            <span className="updated-at">
-              Updated {lastUpdated.toLocaleTimeString()}
+          {isLive ? (
+            <span className="live-indicator">
+              <span className="live-dot" />
+              Live
             </span>
+          ) : (
+            lastUpdated && (
+              <span className="updated-at">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )
           )}
           <button className="btn primary" onClick={onRefresh} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
