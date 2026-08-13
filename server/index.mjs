@@ -289,6 +289,47 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    /* ---- GET /api/console/:id/* — proxy the iLO web UI with stored creds ---- */
+    if (parts[0] === 'api' && parts[1] === 'console' && parts[2]) {
+      const endpoint = loadEndpoints().find((e) => e.id === parts[2]);
+      if (!endpoint) return sendJson(res, 404, { error: 'Endpoint not found' });
+
+      const { hostname, port } = parseHost(endpoint.host);
+      const targetPath = '/' + parts.slice(3).join('/') + (url.search || '');
+      const auth = Buffer.from(`${endpoint.username}:${endpoint.password}`).toString('base64');
+
+      const proxyReq = https.request(
+        {
+          hostname,
+          port,
+          path: targetPath,
+          method: req.method,
+          rejectUnauthorized: false,
+          headers: {
+            ...req.headers,
+            host: `${hostname}:${port}`,
+            authorization: `Basic ${auth}`,
+          },
+          timeout: REDFISH_TIMEOUT_MS,
+        },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode, {
+            'content-type': proxyRes.headers['content-type'] || 'text/html',
+            'content-length': proxyRes.headers['content-length'],
+            'cache-control': 'no-store',
+          });
+          proxyRes.pipe(res);
+        },
+      );
+      proxyReq.on('timeout', () => proxyReq.destroy(new Error('Console timed out')));
+      proxyReq.on('error', () => {
+        if (!res.headersSent) sendJson(res, 502, { error: 'Console unreachable' });
+        else res.end();
+      });
+      req.pipe(proxyReq);
+      return;
+    }
+
     /* ---- GET /api/telemetry — poll all endpoints in parallel ---- */
     if (req.method === 'GET' && url.pathname === '/api/telemetry') {
       const endpoints = loadEndpoints();
