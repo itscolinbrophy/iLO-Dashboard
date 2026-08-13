@@ -103,31 +103,35 @@ export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
       <h2>iLO Endpoints</h2>
 
       <form className="endpoint-form" onSubmit={handleSubmit}>
-        <input
-          placeholder="Display name (optional)"
-          value={form.name}
-          onChange={set('name')}
-        />
-        <input
-          placeholder="Host or IP (e.g. 10.10.10.10)"
-          value={form.host}
-          onChange={set('host')}
-          required
-        />
-        <input
-          placeholder="Username"
-          value={form.username}
-          onChange={set('username')}
-          required
-        />
-        <input
-          type="password"
-          placeholder={form.id ? 'Password (leave blank to keep)' : 'Password'}
-          value={form.password}
-          onChange={set('password')}
-        />
+        <div className="form-row">
+          <input
+            placeholder="Display name (optional)"
+            value={form.name}
+            onChange={set('name')}
+          />
+          <input
+            placeholder="Host or IP (e.g. 10.10.10.10)"
+            value={form.host}
+            onChange={set('host')}
+            required
+          />
+        </div>
+        <div className="form-row">
+          <input
+            placeholder="Username"
+            value={form.username}
+            onChange={set('username')}
+            required
+          />
+          <input
+            type="password"
+            placeholder={form.id ? 'Password (leave blank to keep)' : 'Password'}
+            value={form.password}
+            onChange={set('password')}
+          />
+        </div>
         <div className="form-actions">
-          <button type="submit" className="btn primary" disabled={busy}>
+          <button type="submit" className="btn primary full-width" disabled={busy}>
             {busy ? 'Saving…' : form.id ? 'Save Changes' : 'Add Endpoint'}
           </button>
           {form.id && (

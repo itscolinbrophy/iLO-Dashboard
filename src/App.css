@@ -340,10 +340,16 @@
 
 /* ---------- Endpoint form ---------- */
 .endpoint-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .endpoint-form input {
@@ -372,8 +378,13 @@
   align-items: center;
 }
 
+.btn.full-width {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+}
+
 .form-error {
-  grid-column: 1 / -1;
   color: var(--crit);
   font-size: 13px;
 }
@@ -716,6 +727,9 @@
 @media (max-width: 700px) {
   .kpi-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .form-row {
+    grid-template-columns: 1fr;
   }
   .app {
     padding: 20px 16px 40px;

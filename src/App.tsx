@@ -15,7 +15,18 @@ function App() {
   const [tempColumns, setTempColumns] = useState(2);
   const [tempRows, setTempRows] = useState(2);
   // Auto-refresh interval in seconds. 0 = live (poll as fast as safe), null = off.
-  const [refreshInterval, setRefreshInterval] = useState<number | null>(30);
+  // Persisted in localStorage so the setting survives page reloads.
+  const [refreshInterval, setRefreshInterval] = useState<number | null>(() => {
+    const saved = localStorage.getItem('ilo-refresh-interval');
+    if (saved === 'null') return null;
+    const n = Number(saved);
+    return Number.isFinite(n) ? n : 30;
+  });
+
+  // Persist the refresh interval whenever it changes.
+  useEffect(() => {
+    localStorage.setItem('ilo-refresh-interval', String(refreshInterval));
+  }, [refreshInterval]);
 
   const loadEndpoints = useCallback(async () => {
     try {
