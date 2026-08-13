@@ -12,6 +12,8 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tempColumns, setTempColumns] = useState(2);
+  const [tempRows, setTempRows] = useState(2);
 
   const loadEndpoints = useCallback(async () => {
     try {
@@ -87,6 +89,44 @@ function App() {
                 </svg>
               </button>
             </div>
+
+            <div className="settings-section">
+              <h3>Temperature Layout</h3>
+              <p className="settings-hint">
+                Adjust how the temperature groups are arranged inside each iLO card.
+              </p>
+              <div className="layout-controls">
+                <div className="layout-control">
+                  <span className="layout-label">Columns</span>
+                  <div className="layout-buttons">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button
+                        key={n}
+                        className={`layout-btn ${tempColumns === n ? 'active' : ''}`}
+                        onClick={() => setTempColumns(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="layout-control">
+                  <span className="layout-label">Rows</span>
+                  <div className="layout-buttons">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button
+                        key={n}
+                        className={`layout-btn ${tempRows === n ? 'active' : ''}`}
+                        onClick={() => setTempRows(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <EndpointManager
               endpoints={endpoints}
               onChange={() => {
@@ -104,6 +144,8 @@ function App() {
         loading={loading}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
+        tempColumns={tempColumns}
+        tempRows={tempRows}
       />
     </div>
   );

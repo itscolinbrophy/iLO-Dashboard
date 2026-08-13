@@ -9,6 +9,8 @@ interface TelemetryDashboardProps {
   loading: boolean;
   lastUpdated: Date | null;
   onRefresh: () => void;
+  tempColumns: number;
+  tempRows: number;
 }
 
 /** Live telemetry view: temps, fans, power draw and system health per endpoint. */
@@ -18,6 +20,8 @@ export function TelemetryDashboard({
   loading,
   lastUpdated,
   onRefresh,
+  tempColumns,
+  tempRows,
 }: TelemetryDashboardProps) {
   return (
     <div className="panel">
@@ -49,6 +53,8 @@ export function TelemetryDashboard({
                 endpoint={ep}
                 result={result}
                 loading={loading && !result}
+                tempColumns={tempColumns}
+                tempRows={tempRows}
               />
             );
           })}
@@ -62,10 +68,14 @@ function SystemCard({
   endpoint,
   result,
   loading,
+  tempColumns,
+  tempRows,
 }: {
   endpoint: IloEndpoint;
   result?: TelemetryMap[string];
   loading: boolean;
+  tempColumns: number;
+  tempRows: number;
 }) {
   if (loading) {
     return (
@@ -115,7 +125,7 @@ function SystemCard({
         <Kpi
           label="Power Draw"
           value={
-            data.power.consumedWatts != null
+            data.power.consumedWatts != null && data.power.consumedWatts > 0
               ? `${data.power.consumedWatts} W`
               : '—'
           }
@@ -130,7 +140,13 @@ function SystemCard({
       {groups.length > 0 && (
         <div className="sensor-section">
           <h4>🌡️ Temperatures</h4>
-          <div className="temp-groups">
+          <div
+            className="temp-groups"
+            style={{
+              gridTemplateColumns: `repeat(${tempColumns}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${tempRows}, auto)`,
+            }}
+          >
             {groups.map((group) => (
               <TempGroupAccordion key={group.key} group={group} />
             ))}
