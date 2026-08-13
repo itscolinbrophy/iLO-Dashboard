@@ -113,7 +113,18 @@ function SystemCard({
     <div className="system-card">
       <div className="card-header">
         <h3>{endpoint.name}</h3>
-        <HealthBadge status={sys.health} />
+        <div className="card-header-actions">
+          <a
+            className="btn console-btn"
+            href={`https://${endpoint.host}/html/`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open iLO remote console"
+          >
+            Console
+          </a>
+          <HealthBadge status={sys.health} />
+        </div>
       </div>
       <div className="card-sub">
         {sys.model ?? endpoint.host}
@@ -139,7 +150,7 @@ function SystemCard({
 
       {groups.length > 0 && (
         <div className="sensor-section">
-          <h4>🌡️ Temperatures</h4>
+          <h4>Temperatures</h4>
           <div
             className="temp-groups"
             style={{
@@ -156,7 +167,7 @@ function SystemCard({
 
       {data.fans.length > 0 && (
         <div className="sensor-section">
-          <h4>🌀 Fans</h4>
+          <h4>Fans</h4>
           <ul className="sensor-list">
             {data.fans.map((f, i) => (
               <li key={i} className="sensor-row">
@@ -172,7 +183,7 @@ function SystemCard({
 
       {data.power.supplies.length > 0 && (
         <div className="sensor-section">
-          <h4>🔌 Power Supplies</h4>
+          <h4>Power Supplies</h4>
           <ul className="sensor-list">
             {data.power.supplies.map((p, i) => (
               <li key={i} className="sensor-row">
@@ -192,13 +203,12 @@ function SystemCard({
 /** Expandable temperature group showing average and per-sensor details. */
 function TempGroupAccordion({ group }: { group: TempGroup }) {
   const [open, setOpen] = useState(false);
-  const { emoji, label, average, readings } = group;
+  const { label, average, readings } = group;
 
   return (
     <div className={`temp-group ${open ? 'open' : ''}`}>
       <button className="temp-group-header" onClick={() => setOpen((o) => !o)}>
         <span className="temp-group-title">
-          <span className="temp-group-emoji">{emoji}</span>
           <span className="temp-group-label">{label}</span>
           <span className="temp-group-count">({readings.length})</span>
         </span>

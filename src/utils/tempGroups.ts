@@ -4,20 +4,19 @@ import type { TemperatureReading } from '../types/ilo';
 export interface TempGroup {
   key: string;
   label: string;
-  emoji: string;
   readings: TemperatureReading[];
   average: number;
 }
 
 /** Match rules for each temperature category. */
-const GROUP_RULES: Array<{ key: string; label: string; emoji: string; match: RegExp }> = [
-  { key: 'cpu', label: 'CPU', emoji: '🧠', match: /cpu/i },
-  { key: 'dimm', label: 'DIMM / Memory', emoji: '🧩', match: /dimm|mem/i },
-  { key: 'drives', label: 'Drives / Storage', emoji: '💾', match: /hd|drive|storage|exp bay/i },
-  { key: 'power', label: 'Power Supply', emoji: '🔌', match: /ps |ps[0-9]|p\/s|power supply/i },
-  { key: 'pci', label: 'PCI / Expansion', emoji: '🔧', match: /pci/i },
-  { key: 'vr', label: 'Voltage Regulator', emoji: '⚡', match: /vr/i },
-  { key: 'ambient', label: 'Ambient / System', emoji: '🌡️', match: /inlet|ambient|chipset|zone|battery|ilo|fuse|lom|i\/o/i },
+const GROUP_RULES: Array<{ key: string; label: string; match: RegExp }> = [
+  { key: 'cpu', label: 'CPU', match: /cpu/i },
+  { key: 'dimm', label: 'DIMM / Memory', match: /dimm|mem/i },
+  { key: 'drives', label: 'Drives / Storage', match: /hd|drive|storage|exp bay/i },
+  { key: 'power', label: 'Power Supply', match: /ps |ps[0-9]|p\/s|power supply/i },
+  { key: 'pci', label: 'PCI / Expansion', match: /pci/i },
+  { key: 'vr', label: 'Voltage Regulator', match: /vr/i },
+  { key: 'ambient', label: 'Ambient / System', match: /inlet|ambient|chipset|zone|battery|ilo|fuse|lom|i\/o/i },
 ];
 
 /** Group temperature readings into categories with averages. */
@@ -25,7 +24,6 @@ export function groupTemperatures(readings: TemperatureReading[]): TempGroup[] {
   const groups: TempGroup[] = GROUP_RULES.map((rule) => ({
     key: rule.key,
     label: rule.label,
-    emoji: rule.emoji,
     readings: [],
     average: 0,
   }));
