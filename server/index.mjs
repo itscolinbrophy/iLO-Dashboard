@@ -133,8 +133,9 @@ async function collectTelemetry(endpoint) {
 
     const fans = (thermal.Fans ?? []).map((f) => ({
       name: f.Name ?? f.FanName ?? 'Fan',
-      reading: f.Reading ?? null,
-      units: f.ReadingUnits === 'RPM' ? 'RPM' : '%',
+      // iLO uses CurrentReading/Units (older Redfish) or Reading/ReadingUnits.
+      reading: f.Reading ?? f.CurrentReading ?? null,
+      units: f.ReadingUnits ?? f.Units ?? '%',
       status: healthOf(f),
     }));
 
