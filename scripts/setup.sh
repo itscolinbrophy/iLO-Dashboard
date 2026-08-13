@@ -162,6 +162,23 @@ EOF
   systemctl restart "$SERVICE_NAME"
 }
 
+# Install a simple `update` command so the user can update the dashboard
+# without manually re-fetching setup.sh each time.
+install_update_command() {
+  log "Installing 'update' command..."
+  cat > /usr/local/bin/update <<EOF
+#!/usr/bin/env bash
+# Update the iLO Dashboard: fetch the latest setup script and run it in update mode.
+set -euo pipefail
+echo "[update] Fetching latest setup script..."
+curl -fsSL "$REPO_URL/raw/master/scripts/setup.sh" -o /tmp/ilo-setup.sh
+chmod +x /tmp/ilo-setup.sh
+exec /tmp/ilo-setup.sh --update
+EOF
+  chmod +x /usr/local/bin/update
+  log "Done. Run 'update' any time to pull the latest changes."
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -178,6 +195,7 @@ main() {
   clone_repo
   build_app
   install_service
+  install_update_command
 
   local ip
   ip=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -185,7 +203,7 @@ main() {
   log "Dashboard:  http://${ip:-<container-ip>}:${PORT}"
   log "Service:    systemctl status $SERVICE_NAME"
   log "Logs:       journalctl -u $SERVICE_NAME -f"
-  log "Update:     $0 --update"
+  log "Update:     run 'update'"
 }
 
 main "$@"
