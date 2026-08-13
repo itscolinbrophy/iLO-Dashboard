@@ -42,12 +42,47 @@ Open http://localhost:5173, add your iLO endpoints, and click **Refresh** to pul
 npm run build
 ```
 
+In production, the backend server also serves the built frontend, so a single
+process runs the whole site:
+
+```bash
+npm run build
+npm start        # serves the site + API on http://localhost:3001
+```
+
+## Deploy to a Proxmox container
+
+A setup script is included that installs everything automatically inside a
+Debian/Ubuntu LXC container: Node.js, the repo, the build, and a systemd
+service.
+
+```bash
+# 1. In the container, fetch the script and run it
+curl -fsSL https://raw.githubusercontent.com/itscolinbrophy/iLO-Dashboard/master/scripts/setup.sh -o setup.sh
+chmod +x setup.sh
+sudo ./setup.sh
+
+# 2. Pull updates from GitHub, rebuild, and restart
+sudo ./setup.sh --update
+```
+
+The dashboard will be available at `http://<container-ip>:3001`.
+
+Useful commands:
+
+```bash
+systemctl status ilo-dashboard   # check service status
+journalctl -u ilo-dashboard -f   # follow logs
+```
+
 ## Project Structure
 
 ```
 server/
-  index.mjs        # Node backend: endpoint CRUD + Redfish telemetry proxy
+  index.mjs        # Node backend: endpoint CRUD + Redfish telemetry proxy + static serving
   endpoints.json   # Local endpoint store (gitignored)
+scripts/
+  setup.sh         # Proxmox container setup / update script
 src/
   api/client.ts    # Frontend API client
   components/      # EndpointManager, TelemetryDashboard, HealthBadge

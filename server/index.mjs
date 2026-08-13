@@ -20,6 +20,46 @@ const PORT = Number(process.env.PORT || 3001);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORE = path.join(__dirname, 'endpoints.json');
 const REDFISH_TIMEOUT_MS = 15_000;
+// Built frontend output (from `npm run build`). Served by this server in
+// production so a single process runs the whole site.
+const DIST_DIR = path.join(__dirname, '..', 'dist');
+
+/* ------------------------------------------------------------------ */
+/* Static file serving (production)                                    */
+/* ------------------------------------------------------------------ */
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+};
+
+/** Serve a static file from dist/, falling back to index.html for SPA routes. */
+function serveStatic(req, res, urlPath) {
+  let filePath = path.join(DIST_DIR, urlPath);
+  // Prevent path traversal.
+  if (!filePath.startsWith(DIST_DIR)) {
+    res.writeHead(403);
+    return res.end('Forbidden');
+  }
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(DIST_DIR, 'index.html');
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+  });
+  fs.createReadStream(filePath).pipe(res);
+}
 
 /* ------------------------------------------------------------------ */
 /* Endpoint store                                                      */
@@ -300,6 +340,11 @@ const server = http.createServer(async (req, res) => {
         endpoints.map(async (ep) => [ep.id, await collectTelemetry(ep)]),
       );
       return sendJson(res, 200, Object.fromEntries(results));
+    }
+
+    /* ---- Serve the built frontend (production) ---- */
+    if (req.method === 'GET' && fs.existsSync(DIST_DIR)) {
+      return serveStatic(req, res, url.pathname);
     }
 
     sendJson(res, 404, { error: 'Not found' });
