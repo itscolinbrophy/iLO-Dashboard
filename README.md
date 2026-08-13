@@ -1,22 +1,39 @@
 # iLO Dashboard
 
-A web-based dashboard for monitoring and managing multiple HPE iLO (Integrated Lights-Out) systems. Built with React, TypeScript, and Vite.
+A web-based dashboard for monitoring multiple HPE iLO (Integrated Lights-Out) systems. Built with React, TypeScript, and Vite, with a small Node.js backend that proxies the iLO Redfish API.
 
 ## Features
 
-- **Fleet overview** — summary cards showing total systems, online count, power state, warnings, critical alerts, and average temperature
-- **System table** — sortable list of managed iLO endpoints with health, power, CPU, memory, and temperature
-- **System detail panel** — full details for a selected system, including firmware, serial number, and a link to the iLO web console
-- **Alerts panel** — active alerts across the fleet, grouped by severity
+- **Endpoint management** — add, edit, test, and remove iLO endpoints (host, username, password) from the UI
+- **Live telemetry** — per-system view of temperatures, fan speeds, power draw, power supply status, and overall health
+- **Connection testing** — verify credentials and reachability for each endpoint before relying on it
+- **Secure-by-design** — browsers can't talk to iLO directly (self-signed TLS + CORS), so the backend proxies Redfish calls; passwords are never sent back to the browser
+
+## Architecture
+
+```
+Browser (React)  ──/api──▶  Node backend (server/index.mjs)  ──HTTPS──▶  iLO Redfish API
+```
+
+- The **frontend** calls `/api/*` on the Vite dev server, which proxies to the backend.
+- The **backend** stores endpoints (with credentials) in `server/endpoints.json` (gitignored) and fetches telemetry from each iLO's Redfish endpoints (`/redfish/v1/Systems/1`, `/Chassis/1/Thermal`, `/Chassis/1/Power`).
+- iLO self-signed certificates are accepted (`rejectUnauthorized: false`).
+
+> ⚠️ **Security note:** credentials are stored in plaintext in `server/endpoints.json`. Only run this on a trusted local network. Do not commit this file.
 
 ## Getting Started
 
+Run the backend and the dev server in two terminals:
+
 ```bash
-npm install
+# Terminal 1 — backend proxy
+npm run server
+
+# Terminal 2 — frontend
 npm run dev
 ```
 
-The dev server starts at http://localhost:5173.
+Open http://localhost:5173, add your iLO endpoints, and click **Refresh** to pull live telemetry.
 
 ## Build
 
@@ -27,15 +44,18 @@ npm run build
 ## Project Structure
 
 ```
+server/
+  index.mjs        # Node backend: endpoint CRUD + Redfish telemetry proxy
+  endpoints.json   # Local endpoint store (gitignored)
 src/
-  components/    # UI components (SummaryCards, SystemTable, SystemDetail, AlertsPanel, HealthBadge)
-  data/          # Mock data and summary computation
-  types/         # TypeScript data models (IloSystem, IloAlert, DashboardSummary)
+  api/client.ts    # Frontend API client
+  components/      # EndpointManager, TelemetryDashboard, HealthBadge
+  types/ilo.ts     # TypeScript data models
 ```
 
 ## Roadmap
 
-- [ ] Connect to real iLO endpoints via the Redfish API
-- [ ] Authentication and multi-user support
 - [ ] Power control actions (power on/off, reset)
 - [ ] Historical metrics and charts
+- [ ] Auto-refresh / polling interval
+- [ ] Multi-user authentication

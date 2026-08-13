@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# iLO endpoint credentials (never commit)
+server/endpoints.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
