@@ -213,8 +213,9 @@
 }
 
 .layout-btn {
-  width: 30px;
+  min-width: 30px;
   height: 28px;
+  padding: 0 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -223,6 +224,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 
 .layout-btn:hover {
@@ -511,6 +513,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px;
+  display: flex;
+  flex-direction: column;
   transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
@@ -602,6 +606,11 @@
   letter-spacing: 0.05em;
 }
 
+.sensor-section {
+  display: flex;
+  flex-direction: column;
+}
+
 .sensor-section h4 {
   margin: 14px 0 6px;
   font-size: 12px;
@@ -642,6 +651,7 @@
 .temp-groups {
   display: grid;
   gap: 8px;
+  flex: 1;
 }
 
 .temp-group {
