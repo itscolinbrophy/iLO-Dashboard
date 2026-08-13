@@ -92,8 +92,10 @@ function SystemCard({
 }) {
   if (loading) {
     return (
-      <div className="system-card">
-        <h3>{endpoint.name}</h3>
+      <div className="system-card skeleton">
+        <div className="card-header">
+          <h3>{endpoint.name}</h3>
+        </div>
         <p className="empty-hint">Polling…</p>
       </div>
     );
@@ -102,7 +104,18 @@ function SystemCard({
   if (!result || !result.ok) {
     return (
       <div className="system-card error">
-        <h3>{endpoint.name}</h3>
+        <div className="card-header">
+          <h3>{endpoint.name}</h3>
+          <a
+            className="btn console-btn"
+            href={`https://${endpoint.host}/`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open the iLO web console (HTML5 remote console)"
+          >
+            Console
+          </a>
+        </div>
         <p className="card-error">
           {result && 'error' in result ? result.error : 'No data'}
         </p>

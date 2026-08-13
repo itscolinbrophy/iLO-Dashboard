@@ -1,22 +1,31 @@
 /* iLO Dashboard — component styles */
 
 .app {
-  max-width: 1320px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 28px 24px 48px;
+  padding: 0 28px 56px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 26px;
 }
 
 /* ---------- Header ---------- */
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding-bottom: 20px;
+  padding: 16px 0;
+  margin: 0 -28px;
+  padding-left: 28px;
+  padding-right: 28px;
+  background: rgba(10, 14, 22, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -27,27 +36,28 @@
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   display: grid;
   place-items: center;
   color: #04121f;
   font-weight: 800;
   font-size: 18px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px var(--accent-glow);
 }
 
 .brand-text h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .brand-text .subtitle {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .header-status {
@@ -78,12 +88,13 @@
   border-radius: 10px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.15s;
 }
 .icon-btn:hover {
   color: var(--text);
   border-color: var(--border-strong);
   background: var(--bg-hover);
+  transform: rotate(15deg);
 }
 
 /* Settings overlay */
@@ -222,17 +233,18 @@
 
 /* ---------- Panels ---------- */
 .panel {
-  background: var(--bg-card);
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 24px;
   box-shadow: var(--shadow-sm);
 }
 
 .panel h2 {
   margin: 0 0 18px;
   font-size: 17px;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .panel-header {
@@ -261,8 +273,9 @@
   padding: 7px 14px;
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s, box-shadow 0.15s;
 }
 .btn:hover {
   background: #22304a;
@@ -276,6 +289,7 @@
   border-color: transparent;
   color: #04121f;
   font-weight: 600;
+  box-shadow: 0 2px 12px var(--accent-glow);
 }
 .btn.primary:hover {
   filter: brightness(1.1);
@@ -458,28 +472,53 @@
 
 .telemetry-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 20px;
+  align-items: start;
 }
 
 .system-card {
-  background: var(--bg);
+  position: relative;
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+  transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+}
+
+/* Accent glow line along the top of each card */
+.system-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
 }
 
 .system-card:hover {
   border-color: var(--border-strong);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow);
 }
 
 .system-card.error {
   border-color: rgba(248, 113, 113, 0.4);
+}
+
+.system-card.skeleton {
+  min-height: 140px;
+  animation: card-fade 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes card-fade {
+  from { opacity: 1; }
+  to { opacity: 0.6; }
 }
 
 .card-header {
@@ -491,8 +530,9 @@
 
 .card-header h3 {
   margin: 0;
-  font-size: 16px;
-  letter-spacing: -0.01em;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .card-header-actions {
@@ -502,16 +542,25 @@
 }
 
 .console-btn {
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-size: 12px;
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.console-btn::before {
+  content: '↗';
+  font-size: 13px;
 }
 
 .card-sub {
   color: var(--text-muted);
   font-size: 13px;
-  margin: 4px 0 14px;
+  margin: 6px 0 16px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -520,10 +569,21 @@
 .power-state {
   color: var(--ok);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11.5px;
   background: var(--ok-soft);
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.power-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
 }
 
 .card-error {
@@ -534,30 +594,38 @@
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .kpi {
-  background: var(--bg-card);
+  background: rgba(11, 15, 23, 0.55);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 10px 8px;
+  padding: 12px 8px;
   text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.kpi:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
 }
 
 .kpi-value {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .kpi-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  margin-top: 3px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
+  font-weight: 600;
 }
 
 .sensor-section {
@@ -567,11 +635,12 @@
 }
 
 .sensor-section h4 {
-  margin: 14px 0 6px;
-  font-size: 12px;
-  color: var(--text-muted);
+  margin: 16px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.09em;
 }
 
 .sensor-list {
@@ -585,9 +654,9 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
+  padding: 7px 0;
   font-size: 13px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(33, 44, 66, 0.6);
 }
 
 .sensor-row:last-child {
@@ -595,11 +664,12 @@
 }
 
 .sensor-name {
-  color: var(--text);
+  color: var(--text-muted);
 }
 
 .sensor-value {
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Temperature groups ---------- */
@@ -609,10 +679,15 @@
 }
 
 .temp-group {
-  background: var(--bg-card);
+  background: rgba(11, 15, 23, 0.55);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.temp-group.open {
+  border-color: var(--border-strong);
 }
 
 .temp-group-header {
@@ -624,10 +699,11 @@
   background: transparent;
   border: none;
   color: var(--text);
-  padding: 10px 12px;
+  padding: 11px 13px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+  font-family: inherit;
   transition: background 0.15s;
 }
 
