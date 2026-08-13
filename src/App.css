@@ -609,11 +609,7 @@
 .sensor-section {
   display: flex;
   flex-direction: column;
-}
-
-/* Temperature section grows to fill the card, pinning Fans/Power to the bottom. */
-.sensor-section.grow {
-  flex: 1;
+  margin-bottom: 16px;
 }
 
 .sensor-section h4 {
@@ -656,7 +652,6 @@
 .temp-groups {
   display: grid;
   gap: 8px;
-  flex: 1;
 }
 
 .temp-group {

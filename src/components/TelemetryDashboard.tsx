@@ -164,7 +164,7 @@ function SystemCard({
       </div>
 
       {groups.length > 0 && (
-        <div className="sensor-section grow">
+        <div className="sensor-section">
           <h4>Temperatures</h4>
           <div
             className="temp-groups"
