@@ -74,7 +74,7 @@ do_update() {
   git pull --ff-only origin master || die "git pull failed. Check for local changes."
 
   log "Installing dependencies..."
-  npm ci --omit=dev || npm install
+  npm ci || npm install
 
   log "Building frontend..."
   npm run build
