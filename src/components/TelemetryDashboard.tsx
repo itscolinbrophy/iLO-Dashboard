@@ -44,9 +44,11 @@ export function TelemetryDashboard({
               </span>
             )
           )}
-          <button className="btn primary" onClick={onRefresh} disabled={loading}>
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+          {!isLive && (
+            <button className="btn primary" onClick={onRefresh} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
         </div>
       </div>
 
