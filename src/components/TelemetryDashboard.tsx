@@ -90,8 +90,6 @@ function SystemCard({
   tempColumns: number;
   tempRows: number;
 }) {
-  const [consoleOpen, setConsoleOpen] = useState(false);
-
   if (loading) {
     return (
       <div className="system-card">
@@ -131,13 +129,15 @@ function SystemCard({
       <div className="card-header">
         <h3>{endpoint.name}</h3>
         <div className="card-header-actions">
-          <button
+          <a
             className="btn console-btn"
-            onClick={() => setConsoleOpen(true)}
-            title="Open iLO remote console"
+            href={`https://${endpoint.host}/`}
+            target="_blank"
+            rel="noreferrer"
+            title="Open the iLO web console (HTML5 remote console)"
           >
             Console
-          </button>
+          </a>
           <HealthBadge status={sys.health} />
         </div>
       </div>
@@ -209,32 +209,6 @@ function SystemCard({
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {consoleOpen && (
-        <div className="console-overlay" onClick={() => setConsoleOpen(false)}>
-          <div className="console-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="console-header">
-              <h3>{endpoint.name} — Remote Console</h3>
-              <button
-                className="icon-btn"
-                onClick={() => setConsoleOpen(false)}
-                title="Close console"
-                aria-label="Close console"
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <iframe
-              className="console-frame"
-              src={`/api/console/${endpoint.id}/`}
-              title={`${endpoint.name} console`}
-            />
-          </div>
         </div>
       )}
     </div>

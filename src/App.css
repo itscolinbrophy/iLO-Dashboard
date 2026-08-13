@@ -122,52 +122,6 @@
   font-size: 20px;
 }
 
-/* Console modal */
-.console-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 200;
-}
-
-.console-modal {
-  width: 100%;
-  max-width: 1200px;
-  height: 90vh;
-  background: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.console-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.console-header h3 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.console-frame {
-  flex: 1;
-  width: 100%;
-  border: none;
-  background: #fff;
-}
-
 .settings-section {
   margin-bottom: 24px;
   padding-bottom: 20px;

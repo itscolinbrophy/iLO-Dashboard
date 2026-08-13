@@ -7,6 +7,7 @@ A web-based dashboard for monitoring multiple HPE iLO (Integrated Lights-Out) sy
 - **Endpoint management** — add, edit, test, and remove iLO endpoints (host, username, password) from the UI
 - **Live telemetry** — per-system view of temperatures, fan speeds, power draw, power supply status, and overall health
 - **Connection testing** — verify credentials and reachability for each endpoint before relying on it
+- **Console access** — each card has a Console button that opens the iLO web UI (with the native HTML5 remote console) in a new tab
 - **Secure-by-design** — browsers can't talk to iLO directly (self-signed TLS + CORS), so the backend proxies Redfish calls; passwords are never sent back to the browser
 
 ## Architecture
@@ -57,5 +58,5 @@ src/
 
 - [ ] Power control actions (power on/off, reset)
 - [ ] Historical metrics and charts
-- [ ] Auto-refresh / polling interval
+- [x] Auto-refresh / polling interval (with Live mode)
 - [ ] Multi-user authentication
