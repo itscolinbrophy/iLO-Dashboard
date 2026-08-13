@@ -89,6 +89,13 @@ do_update() {
 # ---------------------------------------------------------------------------
 # Fresh install
 # ---------------------------------------------------------------------------
+install_tools() {
+  log "Ensuring required tools are installed (git, curl, ca-certificates)..."
+  apt-get update -y
+  apt-get install -y git curl ca-certificates gnupg
+  log "Tools ready: $(git --version)"
+}
+
 install_node() {
   if command -v node >/dev/null 2>&1 && [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -ge "$NODE_MAJOR" ]]; then
     log "Node.js already installed: $(node -v)"
@@ -166,6 +173,7 @@ main() {
   fi
 
   log "Starting iLO Dashboard setup..."
+  install_tools
   install_node
   clone_repo
   build_app
