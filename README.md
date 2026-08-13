@@ -1,32 +1,41 @@
-# React + TypeScript + Vite
+# iLO Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A web-based dashboard for monitoring and managing multiple HPE iLO (Integrated Lights-Out) systems. Built with React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Fleet overview** — summary cards showing total systems, online count, power state, warnings, critical alerts, and average temperature
+- **System table** — sortable list of managed iLO endpoints with health, power, CPU, memory, and temperature
+- **System detail panel** — full details for a selected system, including firmware, serial number, and a link to the iLO web console
+- **Alerts panel** — active alerts across the fleet, grouped by severity
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The dev server starts at http://localhost:5173.
+
+## Build
+
+```bash
+npm run build
+```
+
+## Project Structure
+
+```
+src/
+  components/    # UI components (SummaryCards, SystemTable, SystemDetail, AlertsPanel, HealthBadge)
+  data/          # Mock data and summary computation
+  types/         # TypeScript data models (IloSystem, IloAlert, DashboardSummary)
+```
+
+## Roadmap
+
+- [ ] Connect to real iLO endpoints via the Redfish API
+- [ ] Authentication and multi-user support
+- [ ] Power control actions (power on/off, reset)
+- [ ] Historical metrics and charts
