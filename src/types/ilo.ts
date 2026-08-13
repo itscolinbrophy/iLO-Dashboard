@@ -14,6 +14,8 @@ export interface IloEndpoint {
   name: string;
   host: string;
   username: string;
+  /** Whether this iLO supports "Silence of the Fans" fan control. */
+  sotf: boolean;
 }
 
 /** Form payload for creating/updating an endpoint. */
@@ -22,6 +24,15 @@ export interface EndpointInput {
   host: string;
   username: string;
   password?: string;
+  sotf?: boolean;
+}
+
+/** Result of a fan speed control action. */
+export interface FanControlResult {
+  ok: boolean;
+  percent?: number;
+  error?: string;
+  output?: string;
 }
 
 /** A single temperature sensor reading. */

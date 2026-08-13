@@ -1,6 +1,7 @@
 import type { IloEndpoint, TelemetryMap, TelemetrySuccess } from '../types/ilo';
 import { HealthBadge } from './HealthBadge';
 import { groupTemperatures, type TempGroup } from '../utils/tempGroups';
+import { setFanSpeed, resetFanControl } from '../api/client';
 import { useState } from 'react';
 
 interface TelemetryDashboardProps {
@@ -137,6 +138,37 @@ function SystemCard({
   );
   const groups = groupTemperatures(data.temperatures);
 
+  // Fan speed control (Silence of the Fans).
+  const [fanPercent, setFanPercent] = useState(30);
+  const [fanBusy, setFanBusy] = useState(false);
+  const [fanMsg, setFanMsg] = useState<string | null>(null);
+
+  const handleSetFan = async () => {
+    setFanBusy(true);
+    setFanMsg(null);
+    try {
+      const res = await setFanSpeed(endpoint.id, fanPercent);
+      setFanMsg(res.ok ? `Fan speed set to ${res.percent}%` : res.error ?? 'Failed');
+    } catch (err) {
+      setFanMsg(err instanceof Error ? err.message : 'Failed to set fan speed');
+    } finally {
+      setFanBusy(false);
+    }
+  };
+
+  const handleResetFan = async () => {
+    setFanBusy(true);
+    setFanMsg(null);
+    try {
+      const res = await resetFanControl(endpoint.id);
+      setFanMsg(res.ok ? 'Fan control reset to automatic' : res.error ?? 'Failed');
+    } catch (err) {
+      setFanMsg(err instanceof Error ? err.message : 'Failed to reset fan control');
+    } finally {
+      setFanBusy(false);
+    }
+  };
+
   return (
     <div className="system-card">
       <div className="card-header">
@@ -206,6 +238,41 @@ function SystemCard({
               </li>
             ))}
           </ul>
+
+          {endpoint.sotf && (
+            <div className="fan-control">
+              <div className="fan-control-header">
+                <span className="fan-control-title">Fan Speed Control</span>
+                <span className="fan-control-value">{fanPercent}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={fanPercent}
+                onChange={(e) => setFanPercent(Number(e.target.value))}
+                className="fan-slider"
+              />
+              <div className="fan-control-actions">
+                <button
+                  className="btn primary"
+                  onClick={handleSetFan}
+                  disabled={fanBusy}
+                >
+                  {fanBusy ? 'Applying…' : 'Apply'}
+                </button>
+                <button
+                  className="btn"
+                  onClick={handleResetFan}
+                  disabled={fanBusy}
+                >
+                  Auto
+                </button>
+              </div>
+              {fanMsg && <div className="fan-msg">{fanMsg}</div>}
+            </div>
+          )}
         </div>
       )}
 

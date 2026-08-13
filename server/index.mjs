@@ -15,11 +15,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { Client } from 'ssh2';
 
 const PORT = Number(process.env.PORT || 3001);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORE = path.join(__dirname, 'endpoints.json');
 const REDFISH_TIMEOUT_MS = 15_000;
+const SSH_TIMEOUT_MS = 15_000;
 // Built frontend output (from `npm run build`). Served by this server in
 // production so a single process runs the whole site.
 const DIST_DIR = path.join(__dirname, '..', 'dist');
@@ -79,7 +81,92 @@ function saveEndpoints(endpoints) {
 
 /** Strip password before sending an endpoint to the client. */
 function publicEndpoint(ep) {
-  return { id: ep.id, name: ep.name, host: ep.host, username: ep.username };
+  return {
+    id: ep.id,
+    name: ep.name,
+    host: ep.host,
+    username: ep.username,
+    sotf: !!ep.sotf,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* SSH client (Silence of the Fans)                                    */
+/* ------------------------------------------------------------------ */
+
+/** Run a command over SSH and resolve with the combined output. */
+function sshExec(host, username, password, command) {
+  const { hostname, port } = parseHost(host);
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+    let output = '';
+    let settled = false;
+
+    const done = (err, result) => {
+      if (settled) return;
+      settled = true;
+      conn.end();
+      if (err) reject(err);
+      else resolve(result);
+    };
+
+    conn.on('ready', () => {
+      conn.exec(command, (err, stream) => {
+        if (err) return done(err);
+        stream
+          .on('close', () => done(null, output.trim()))
+          .on('data', (data) => (output += data.toString()))
+          .stderr.on('data', (data) => (output += data.toString()));
+      });
+    });
+    conn.on('error', (err) => done(err));
+    conn.on('timeout', () => done(new Error('SSH connection timed out')));
+
+    conn.connect({
+      host: hostname,
+      port: port === 443 ? 22 : port,
+      username,
+      password,
+      readyTimeout: SSH_TIMEOUT_MS,
+      timeout: SSH_TIMEOUT_MS,
+    });
+  });
+}
+
+/**
+ * Set the fan speed on an iLO that supports "Silence of the Fans" (SOTF).
+ * Uses the standard iLO fan-control commands over SSH.
+ */
+async function setFanSpeed(endpoint, percent) {
+  const clamped = Math.max(0, Math.min(100, Number(percent)));
+  const commands = [
+    'set /map1/fan_zone0 desiredfanlevel ' + clamped,
+    'set /map1/fan_zone1 desiredfanlevel ' + clamped,
+    'set /map1/fan_zone2 desiredfanlevel ' + clamped,
+    'set /map1/fan_zone3 desiredfanlevel ' + clamped,
+  ];
+  const results = [];
+  for (const cmd of commands) {
+    const out = await sshExec(endpoint.host, endpoint.username, endpoint.password, cmd);
+    results.push(out);
+  }
+  return { ok: true, percent: clamped, output: results.join('\n') };
+}
+
+/** Reset fan control back to automatic (managed by the system). */
+async function resetFanControl(endpoint) {
+  const commands = [
+    'set /map1/fan_zone0 desiredfanlevel 0',
+    'set /map1/fan_zone1 desiredfanlevel 0',
+    'set /map1/fan_zone2 desiredfanlevel 0',
+    'set /map1/fan_zone3 desiredfanlevel 0',
+  ];
+  const results = [];
+  for (const cmd of commands) {
+    const out = await sshExec(endpoint.host, endpoint.username, endpoint.password, cmd);
+    results.push(out);
+  }
+  return { ok: true, output: results.join('\n') };
 }
 
 /* ------------------------------------------------------------------ */
@@ -283,6 +370,7 @@ const server = http.createServer(async (req, res) => {
         host: body.host.trim(),
         username: body.username.trim(),
         password: body.password,
+        sotf: !!body.sotf,
       };
       endpoints.push(endpoint);
       saveEndpoints(endpoints);
@@ -304,6 +392,7 @@ const server = http.createServer(async (req, res) => {
         if (body.host !== undefined) endpoint.host = String(body.host).trim();
         if (body.username !== undefined) endpoint.username = String(body.username).trim();
         if (body.password) endpoint.password = body.password; // empty = keep existing
+        if (body.sotf !== undefined) endpoint.sotf = !!body.sotf;
         saveEndpoints(endpoints);
         return sendJson(res, 200, publicEndpoint(endpoint));
       }
@@ -329,6 +418,32 @@ const server = http.createServer(async (req, res) => {
           });
         } catch (err) {
           return sendJson(res, 200, { ok: false, message: err.message });
+        }
+      }
+
+      /* ---- POST /api/endpoints/:id/fans ---- */
+      if (req.method === 'POST' && parts[3] === 'fans') {
+        if (!endpoint.sotf) {
+          return sendJson(res, 400, {
+            error: 'Silence of the Fans is not enabled for this endpoint.',
+          });
+        }
+        const body = await readBody(req);
+        try {
+          if (body.action === 'reset') {
+            const result = await resetFanControl(endpoint);
+            return sendJson(res, 200, result);
+          }
+          if (body.percent == null) {
+            return sendJson(res, 400, { error: 'percent is required' });
+          }
+          const result = await setFanSpeed(endpoint, body.percent);
+          return sendJson(res, 200, result);
+        } catch (err) {
+          return sendJson(res, 200, {
+            ok: false,
+            error: err.message || 'Failed to set fan speed',
+          });
         }
       }
     }

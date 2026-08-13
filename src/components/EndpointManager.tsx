@@ -18,9 +18,17 @@ interface FormState {
   host: string;
   username: string;
   password: string;
+  sotf: boolean;
 }
 
-const EMPTY_FORM: FormState = { id: null, name: '', host: '', username: '', password: '' };
+const EMPTY_FORM: FormState = {
+  id: null,
+  name: '',
+  host: '',
+  username: '',
+  password: '',
+  sotf: false,
+};
 
 /** Panel to add, edit, test and remove iLO endpoints. */
 export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
@@ -34,7 +42,14 @@ export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
     setForm((f) => ({ ...f, [field]: e.target.value }));
 
   const startEdit = (ep: IloEndpoint) =>
-    setForm({ id: ep.id, name: ep.name, host: ep.host, username: ep.username, password: '' });
+    setForm({
+      id: ep.id,
+      name: ep.name,
+      host: ep.host,
+      username: ep.username,
+      password: '',
+      sotf: !!ep.sotf,
+    });
 
   const reset = () => {
     setForm(EMPTY_FORM);
@@ -57,6 +72,7 @@ export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
       host: form.host.trim(),
       username: form.username.trim(),
       password: form.password || undefined,
+      sotf: form.sotf,
     };
     setBusy(true);
     try {
@@ -130,6 +146,16 @@ export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
             onChange={set('password')}
           />
         </div>
+        <label className="sotf-toggle">
+          <input
+            type="checkbox"
+            checked={form.sotf}
+            onChange={(e) => setForm((f) => ({ ...f, sotf: e.target.checked }))}
+          />
+          <span className="sotf-toggle-label">
+            Enable Silence of the Fans (fan speed control)
+          </span>
+        </label>
         <div className="form-actions">
           <button type="submit" className="btn primary full-width" disabled={busy}>
             {busy ? 'Saving…' : form.id ? 'Save Changes' : 'Add Endpoint'}
@@ -156,6 +182,7 @@ export function EndpointManager({ endpoints, onChange }: EndpointManagerProps) {
                 <span className="endpoint-name">{ep.name}</span>
                 <span className="endpoint-host">{ep.host}</span>
                 <span className="endpoint-user">{ep.username}</span>
+                {ep.sotf && <span className="sotf-badge">SOTF</span>}
               </div>
               <div className="endpoint-actions">
                 {testMsg[ep.id] && (

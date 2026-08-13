@@ -3,6 +3,7 @@ import type {
   EndpointInput,
   TelemetryMap,
   TestResult,
+  FanControlResult,
 } from '../types/ilo';
 
 const BASE = '/api';
@@ -47,4 +48,20 @@ export function testEndpoint(id: string): Promise<TestResult> {
 /** Poll live telemetry from all endpoints. */
 export function fetchTelemetry(): Promise<TelemetryMap> {
   return request('/telemetry');
+}
+
+/** Set the fan speed (0-100%) on an iLO with Silence of the Fans enabled. */
+export function setFanSpeed(id: string, percent: number): Promise<FanControlResult> {
+  return request(`/endpoints/${id}/fans`, {
+    method: 'POST',
+    body: JSON.stringify({ percent }),
+  });
+}
+
+/** Reset fan control back to automatic on an iLO. */
+export function resetFanControl(id: string): Promise<FanControlResult> {
+  return request(`/endpoints/${id}/fans`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'reset' }),
+  });
 }
