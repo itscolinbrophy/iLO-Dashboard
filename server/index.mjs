@@ -129,6 +129,43 @@ function sshExec(host, username, password, command) {
       password,
       readyTimeout: SSH_TIMEOUT_MS,
       timeout: SSH_TIMEOUT_MS,
+      // Older iLO firmware (e.g. Gen9) only supports legacy SSH algorithms.
+      // Enable them so the handshake succeeds.
+      algorithms: {
+        kex: [
+          'diffie-hellman-group14-sha1',
+          'diffie-hellman-group1-sha1',
+          'diffie-hellman-group-exchange-sha1',
+          'diffie-hellman-group-exchange-sha256',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521',
+        ],
+        cipher: [
+          'aes128-cbc',
+          'aes192-cbc',
+          'aes256-cbc',
+          'aes128-ctr',
+          'aes192-ctr',
+          'aes256-ctr',
+          '3des-cbc',
+        ],
+        serverHostKey: [
+          'ssh-rsa',
+          'ssh-dss',
+          'ecdsa-sha2-nistp256',
+          'ecdsa-sha2-nistp384',
+          'ecdsa-sha2-nistp521',
+        ],
+        hmac: [
+          'hmac-sha1',
+          'hmac-sha1-96',
+          'hmac-md5',
+          'hmac-md5-96',
+          'hmac-sha2-256',
+          'hmac-sha2-512',
+        ],
+      },
     });
   });
 }
@@ -150,7 +187,18 @@ async function setFanSpeed(endpoint, percent) {
     const out = await sshExec(endpoint.host, endpoint.username, endpoint.password, cmd);
     results.push(out);
   }
-  return { ok: true, percent: clamped, output: results.join('\n') };
+  const combined = results.join('\n');
+  // iLO 4 and some models don't expose fan_zone targets — report clearly.
+  if (/invalid target|invalid option/i.test(combined)) {
+    return {
+      ok: false,
+      error:
+        'This iLO does not support Silence of the Fans fan control ' +
+        '(requires iLO 5/6 with fan_zone targets).',
+      output: combined,
+    };
+  }
+  return { ok: true, percent: clamped, output: combined };
 }
 
 /** Reset fan control back to automatic (managed by the system). */
@@ -166,7 +214,17 @@ async function resetFanControl(endpoint) {
     const out = await sshExec(endpoint.host, endpoint.username, endpoint.password, cmd);
     results.push(out);
   }
-  return { ok: true, output: results.join('\n') };
+  const combined = results.join('\n');
+  if (/invalid target|invalid option/i.test(combined)) {
+    return {
+      ok: false,
+      error:
+        'This iLO does not support Silence of the Fans fan control ' +
+        '(requires iLO 5/6 with fan_zone targets).',
+      output: combined,
+    };
+  }
+  return { ok: true, output: combined };
 }
 
 /* ------------------------------------------------------------------ */
