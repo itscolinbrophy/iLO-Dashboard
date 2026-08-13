@@ -122,7 +122,8 @@ async function collectTelemetry(endpoint) {
     const power = powerRes.status === 'fulfilled' ? powerRes.value : {};
 
     const temperatures = (thermal.Temperatures ?? [])
-      .filter((t) => t.ReadingCelsius != null)
+      // Omit sensors reading 0°C — these are unpopulated/not physically present.
+      .filter((t) => t.ReadingCelsius != null && t.ReadingCelsius > 0)
       .map((t) => ({
         name: t.Name ?? 'Sensor',
         readingC: t.ReadingCelsius,
@@ -131,13 +132,16 @@ async function collectTelemetry(endpoint) {
         status: healthOf(t),
       }));
 
-    const fans = (thermal.Fans ?? []).map((f) => ({
-      name: f.Name ?? f.FanName ?? 'Fan',
-      // iLO uses CurrentReading/Units (older Redfish) or Reading/ReadingUnits.
-      reading: f.Reading ?? f.CurrentReading ?? null,
-      units: f.ReadingUnits ?? f.Units ?? '%',
-      status: healthOf(f),
-    }));
+    const fans = (thermal.Fans ?? [])
+      // Omit fans reading 0 — a fan at 0 isn't physically present.
+      .filter((f) => (f.Reading ?? f.CurrentReading ?? 0) > 0)
+      .map((f) => ({
+        name: f.Name ?? f.FanName ?? 'Fan',
+        // iLO uses CurrentReading/Units (older Redfish) or Reading/ReadingUnits.
+        reading: f.Reading ?? f.CurrentReading ?? null,
+        units: f.ReadingUnits ?? f.Units ?? '%',
+        status: healthOf(f),
+      }));
 
     const control = power.PowerControl?.[0] ?? {};
     const powerInfo = {

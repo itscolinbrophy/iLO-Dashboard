@@ -14,6 +14,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tempColumns, setTempColumns] = useState(2);
   const [tempRows, setTempRows] = useState(2);
+  // Auto-refresh interval in seconds. 0 = live (poll as fast as safe), null = off.
+  const [refreshInterval, setRefreshInterval] = useState<number | null>(30);
 
   const loadEndpoints = useCallback(async () => {
     try {
@@ -37,9 +39,19 @@ function App() {
     }
   }, []);
 
+  // Poll once on page load.
   useEffect(() => {
     loadEndpoints();
-  }, [loadEndpoints]);
+    refresh();
+  }, [loadEndpoints, refresh]);
+
+  // Auto-refresh at the configured interval.
+  useEffect(() => {
+    if (refreshInterval == null) return;
+    const ms = refreshInterval === 0 ? 5000 : refreshInterval * 1000;
+    const id = setInterval(refresh, ms);
+    return () => clearInterval(id);
+  }, [refreshInterval, refresh]);
 
   return (
     <div className="app">
@@ -88,6 +100,44 @@ function App() {
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
+            </div>
+
+            <div className="settings-section">
+              <h3>Auto-Refresh</h3>
+              <p className="settings-hint">
+                How often to poll the iLOs for fresh telemetry. "Live" polls as
+                fast as is safe for the iLO.
+              </p>
+              <div className="layout-controls">
+                <div className="layout-control">
+                  <span className="layout-label">Interval</span>
+                  <div className="layout-buttons">
+                    <button
+                      className={`layout-btn ${refreshInterval === 0 ? 'active' : ''}`}
+                      onClick={() => setRefreshInterval(0)}
+                      title="Poll as fast as safe"
+                    >
+                      Live
+                    </button>
+                    {[15, 30, 60, 300].map((n) => (
+                      <button
+                        key={n}
+                        className={`layout-btn ${refreshInterval === n ? 'active' : ''}`}
+                        onClick={() => setRefreshInterval(n)}
+                      >
+                        {n}s
+                      </button>
+                    ))}
+                    <button
+                      className={`layout-btn ${refreshInterval === null ? 'active' : ''}`}
+                      onClick={() => setRefreshInterval(null)}
+                      title="Disable auto-refresh"
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="settings-section">
