@@ -1,5 +1,7 @@
 import type { IloEndpoint, TelemetryMap, TelemetrySuccess } from '../types/ilo';
 import { HealthBadge } from './HealthBadge';
+import { groupTemperatures, type TempGroup } from '../utils/tempGroups';
+import { useState } from 'react';
 
 interface TelemetryDashboardProps {
   endpoints: IloEndpoint[];
@@ -95,6 +97,7 @@ function SystemCard({
     (m, f) => Math.max(m, f.reading ?? 0),
     0,
   );
+  const groups = groupTemperatures(data.temperatures);
 
   return (
     <div className="system-card">
@@ -124,23 +127,20 @@ function SystemCard({
         />
       </div>
 
-      {data.temperatures.length > 0 && (
+      {groups.length > 0 && (
         <div className="sensor-section">
-          <h4>Temperatures</h4>
-          <ul className="sensor-list">
-            {data.temperatures.map((t, i) => (
-              <li key={i} className="sensor-row">
-                <span className="sensor-name">{t.name}</span>
-                <span className="sensor-value">{t.readingC}°C</span>
-              </li>
+          <h4>🌡️ Temperatures</h4>
+          <div className="temp-groups">
+            {groups.map((group) => (
+              <TempGroupAccordion key={group.key} group={group} />
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {data.fans.length > 0 && (
         <div className="sensor-section">
-          <h4>Fans</h4>
+          <h4>🌀 Fans</h4>
           <ul className="sensor-list">
             {data.fans.map((f, i) => (
               <li key={i} className="sensor-row">
@@ -156,7 +156,7 @@ function SystemCard({
 
       {data.power.supplies.length > 0 && (
         <div className="sensor-section">
-          <h4>Power Supplies</h4>
+          <h4>🔌 Power Supplies</h4>
           <ul className="sensor-list">
             {data.power.supplies.map((p, i) => (
               <li key={i} className="sensor-row">
@@ -168,6 +168,38 @@ function SystemCard({
             ))}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Expandable temperature group showing average and per-sensor details. */
+function TempGroupAccordion({ group }: { group: TempGroup }) {
+  const [open, setOpen] = useState(false);
+  const { emoji, label, average, readings } = group;
+
+  return (
+    <div className={`temp-group ${open ? 'open' : ''}`}>
+      <button className="temp-group-header" onClick={() => setOpen((o) => !o)}>
+        <span className="temp-group-title">
+          <span className="temp-group-emoji">{emoji}</span>
+          <span className="temp-group-label">{label}</span>
+          <span className="temp-group-count">({readings.length})</span>
+        </span>
+        <span className="temp-group-right">
+          <span className="temp-group-avg">{average}°C</span>
+          <span className={`chevron ${open ? 'rotated' : ''}`}>▾</span>
+        </span>
+      </button>
+      {open && (
+        <ul className="sensor-list temp-group-detail">
+          {readings.map((t, i) => (
+            <li key={i} className="sensor-row">
+              <span className="sensor-name">{t.name}</span>
+              <span className="sensor-value">{t.readingC}°C</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

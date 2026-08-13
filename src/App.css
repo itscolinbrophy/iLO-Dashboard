@@ -477,6 +477,82 @@
   font-weight: 600;
 }
 
+/* ---------- Temperature groups ---------- */
+.temp-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.temp-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.temp-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.temp-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.temp-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.temp-group-emoji {
+  font-size: 15px;
+}
+
+.temp-group-count {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.temp-group-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.temp-group-avg {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.chevron {
+  color: var(--text-muted);
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+
+.chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.temp-group-detail {
+  padding: 4px 12px 10px;
+  border-top: 1px solid var(--border);
+}
+
 /* ---------- Health badges ---------- */
 .health-badge {
   display: inline-block;
