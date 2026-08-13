@@ -611,6 +611,11 @@
   flex-direction: column;
 }
 
+/* Temperature section grows to fill the card, pinning Fans/Power to the bottom. */
+.sensor-section.grow {
+  flex: 1;
+}
+
 .sensor-section h4 {
   margin: 14px 0 6px;
   font-size: 12px;
