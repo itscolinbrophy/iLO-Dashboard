@@ -11,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const loadEndpoints = useCallback(async () => {
     try {
@@ -48,21 +49,54 @@ function App() {
             <span className="subtitle">HPE Integrated Lights-Out fleet overview</span>
           </div>
         </div>
-        <div className="header-status">
-          <span className="pulse-dot" />
-          {endpoints.length} endpoint{endpoints.length === 1 ? '' : 's'} configured
+        <div className="header-actions">
+          <div className="header-status">
+            <span className="pulse-dot" />
+            {endpoints.length} endpoint{endpoints.length === 1 ? '' : 's'} configured
+          </div>
+          <button
+            className="icon-btn"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            aria-label="Settings"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
         </div>
       </header>
 
       {error && <div className="banner error">{error}</div>}
 
-      <EndpointManager
-        endpoints={endpoints}
-        onChange={() => {
-          loadEndpoints();
-          refresh();
-        }}
-      />
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <h2>Settings</h2>
+              <button
+                className="icon-btn"
+                onClick={() => setSettingsOpen(false)}
+                title="Close"
+                aria-label="Close settings"
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <EndpointManager
+              endpoints={endpoints}
+              onChange={() => {
+                loadEndpoints();
+                refresh();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <TelemetryDashboard
         endpoints={endpoints}
