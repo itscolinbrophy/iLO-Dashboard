@@ -570,6 +570,15 @@ function HistoryChart({ samples }: { samples: HistorySample[] }) {
       .padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
   };
 
+  // X-axis time ticks: anchor the first label left, the last label right,
+  // so the outermost labels don't get clipped off the edge of the chart.
+  const timeTick = (i: number) => {
+    const idx = (i / timeTicks) * (samples.length - 1);
+    const anchor: 'start' | 'end' | 'middle' =
+      i === 0 ? 'start' : i === timeTicks ? 'end' : 'middle';
+    return { x: x(idx), anchor };
+  };
+
   return (
     <div className="history-chart">
       <div className="history-graph">
@@ -598,17 +607,20 @@ function HistoryChart({ samples }: { samples: HistorySample[] }) {
             strokeLinejoin="round"
           />
           {/* X-axis time labels */}
-          {Array.from({ length: timeTicks + 1 }, (_, i) => (
-            <text
-              key={i}
-              x={x((i / timeTicks) * (samples.length - 1))}
-              y={height - padB / 2 + 4}
-              textAnchor="middle"
-              className="history-xlabel"
-            >
-              {timeLabel((i / timeTicks) * (samples.length - 1))}
-            </text>
-          ))}
+          {Array.from({ length: timeTicks + 1 }, (_, i) => {
+            const tick = timeTick(i);
+            return (
+              <text
+                key={i}
+                x={tick.x}
+                y={height - padB / 2 + 4}
+                textAnchor={tick.anchor}
+                className="history-xlabel"
+              >
+                {timeLabel((i / timeTicks) * (samples.length - 1))}
+              </text>
+            );
+          })}
         </svg>
       </div>
 
@@ -636,17 +648,20 @@ function HistoryChart({ samples }: { samples: HistorySample[] }) {
             strokeWidth="2"
             strokeLinejoin="round"
           />
-          {Array.from({ length: timeTicks + 1 }, (_, i) => (
-            <text
-              key={i}
-              x={x((i / timeTicks) * (samples.length - 1))}
-              y={height - padB / 2 + 4}
-              textAnchor="middle"
-              className="history-xlabel"
-            >
-              {timeLabel((i / timeTicks) * (samples.length - 1))}
-            </text>
-          ))}
+          {Array.from({ length: timeTicks + 1 }, (_, i) => {
+            const tick = timeTick(i);
+            return (
+              <text
+                key={i}
+                x={tick.x}
+                y={height - padB / 2 + 4}
+                textAnchor={tick.anchor}
+                className="history-xlabel"
+              >
+                {timeLabel((i / timeTicks) * (samples.length - 1))}
+              </text>
+            );
+          })}
         </svg>
       </div>
     </div>

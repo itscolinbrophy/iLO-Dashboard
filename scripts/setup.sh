@@ -21,6 +21,8 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 REPO_URL="https://github.com/itscolinbrophy/iLO-Dashboard.git"
+# Raw URL for fetching this script directly (used by the 'update' command).
+RAW_SCRIPT_URL="https://raw.githubusercontent.com/itscolinbrophy/iLO-Dashboard/master/scripts/setup.sh"
 APP_DIR="/opt/ilo-dashboard"
 SERVICE_NAME="ilo-dashboard"
 PORT="${PORT:-3001}"
@@ -78,6 +80,9 @@ do_update() {
 
   log "Building frontend..."
   npm run build
+
+  # Reinstall the update command so it stays in sync with this script.
+  install_update_command
 
   log "Restarting service..."
   systemctl restart "$SERVICE_NAME" || warn "Could not restart service (is it running?)."
@@ -162,18 +167,35 @@ EOF
   systemctl restart "$SERVICE_NAME"
 }
 
-# Install a simple `update` command so the user can update the dashboard
-# without manually re-fetching setup.sh each time.
+# Install a simple `update` command so the user can update the dashboard.
+# This is self-contained (git pull + rebuild + restart) so it works even if
+# the script can't be fetched over the network.
 install_update_command() {
   log "Installing 'update' command..."
   cat > /usr/local/bin/update <<EOF
 #!/usr/bin/env bash
-# Update the iLO Dashboard: fetch the latest setup script and run it in update mode.
+# Update the iLO Dashboard: pull latest, rebuild, and restart the service.
 set -euo pipefail
-echo "[update] Fetching latest setup script..."
-curl -fsSL "$REPO_URL/raw/master/scripts/setup.sh" -o /tmp/ilo-setup.sh
-chmod +x /tmp/ilo-setup.sh
-exec /tmp/ilo-setup.sh --update
+
+APP_DIR="$APP_DIR"
+SERVICE_NAME="$SERVICE_NAME"
+
+[[ -d "\$APP_DIR/.git" ]] || { echo "No install found at \$APP_DIR"; exit 1; }
+
+echo "[update] Pulling latest changes..."
+cd "\$APP_DIR"
+git pull --ff-only origin master || { echo "[update] git pull failed"; exit 1; }
+
+echo "[update] Installing dependencies..."
+npm ci || npm install
+
+echo "[update] Building frontend..."
+npm run build
+
+echo "[update] Restarting service..."
+systemctl restart "\$SERVICE_NAME"
+
+echo "[update] Done. Dashboard updated."
 EOF
   chmod +x /usr/local/bin/update
   log "Done. Run 'update' any time to pull the latest changes."
