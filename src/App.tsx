@@ -1,214 +1,228 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listEndpoints, fetchTelemetry } from './api/client';
-import { EndpointManager } from './components/EndpointManager';
-import { TelemetryDashboard } from './components/TelemetryDashboard';
+import {
+  fetchHomelabConfig,
+  fetchServicesStatus,
+  fetchArrCalendar,
+  saveDashboardLayout,
+} from './api/homelabClient';
+import { SidebarNav } from './components/SidebarNav';
+import { ConfigurableDashboard } from './components/ConfigurableDashboard';
+import { DedicatedCategoryView } from './components/DedicatedCategoryView';
+import { HomelabSettingsModal } from './components/HomelabSettingsModal';
+import { Icon } from './components/common/Icon';
 import type { IloEndpoint, TelemetryMap } from './types/ilo';
+import type {
+  HomelabConfig,
+  ServiceDataResponse,
+  ArrCalendarItem,
+  DashboardLayoutConfig,
+} from './types/homelab';
 import './App.css';
+import './Homelab.css';
+
+const DEFAULT_HOMELAB_CONFIG: HomelabConfig = {
+  services: [],
+  quickLinks: [],
+  dashboardLayout: {
+    columns: 3,
+    gap: 16,
+    widgets: [],
+  },
+  refreshInterval: 15,
+};
 
 function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Homelab Unified State
+  const [homelabConfig, setHomelabConfig] = useState<HomelabConfig>(DEFAULT_HOMELAB_CONFIG);
+  const [servicesStatus, setServicesStatus] = useState<Record<string, ServiceDataResponse>>({});
+  const [calendarItems, setCalendarItems] = useState<ArrCalendarItem[]>([]);
+
+  // iLO State
   const [endpoints, setEndpoints] = useState<IloEndpoint[]>([]);
   const [telemetry, setTelemetry] = useState<TelemetryMap>({});
+
+  // General App State
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [tempColumns, setTempColumns] = useState(2);
-  const [tempRows, setTempRows] = useState(2);
-  // Auto-refresh interval in seconds. 0 = live (poll as fast as safe), null = off.
-  // Persisted in localStorage so the setting survives page reloads.
-  const [refreshInterval, setRefreshInterval] = useState<number | null>(() => {
-    const saved = localStorage.getItem('ilo-refresh-interval');
-    if (saved === 'null') return null;
-    const n = Number(saved);
-    return Number.isFinite(n) ? n : 30;
-  });
 
-  // Persist the refresh interval whenever it changes.
-  useEffect(() => {
-    localStorage.setItem('ilo-refresh-interval', String(refreshInterval));
-  }, [refreshInterval]);
-
-  const loadEndpoints = useCallback(async () => {
+  /* Load initial config & endpoints */
+  const loadInitialData = useCallback(async () => {
     try {
-      setEndpoints(await listEndpoints());
+      const [cfg, eps] = await Promise.all([
+        fetchHomelabConfig().catch(() => DEFAULT_HOMELAB_CONFIG),
+        listEndpoints().catch(() => []),
+      ]);
+      setHomelabConfig(cfg);
+      setEndpoints(eps);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load endpoints');
+      console.error('Failed to load initial data:', err);
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  /* Refresh all live services & telemetry */
+  const refreshAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchTelemetry();
-      setTelemetry(data);
+      const [telemetryData, servicesData, calData] = await Promise.all([
+        fetchTelemetry().catch(() => ({})),
+        fetchServicesStatus().catch(() => ({})),
+        fetchArrCalendar().catch(() => []),
+      ]);
+      setTelemetry(telemetryData);
+      setServicesStatus(servicesData);
+      setCalendarItems(calData);
       setLastUpdated(new Date());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch telemetry');
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh telemetry');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Poll once on page load.
+  // On mount
   useEffect(() => {
-    loadEndpoints();
-    refresh();
-  }, [loadEndpoints, refresh]);
+    loadInitialData();
+    refreshAll();
+  }, [loadInitialData, refreshAll]);
 
-  // Auto-refresh at the configured interval.
+  // Polling loop
   useEffect(() => {
-    if (refreshInterval == null) return;
-    const ms = refreshInterval === 0 ? 5000 : refreshInterval * 1000;
-    const id = setInterval(refresh, ms);
-    return () => clearInterval(id);
-  }, [refreshInterval, refresh]);
+    const intervalSec = homelabConfig.refreshInterval ?? 15;
+    if (intervalSec <= 0) return;
+    const timer = setInterval(() => {
+      refreshAll();
+    }, intervalSec * 1000);
+    return () => clearInterval(timer);
+  }, [homelabConfig.refreshInterval, refreshAll]);
+
+  // Layout save handler
+  const handleUpdateLayout = async (newLayout: DashboardLayoutConfig) => {
+    const updated = { ...homelabConfig, dashboardLayout: newLayout };
+    setHomelabConfig(updated);
+    try {
+      await saveDashboardLayout(newLayout, homelabConfig.refreshInterval, homelabConfig.theme);
+    } catch (err) {
+      console.error('Failed to save layout to server:', err);
+    }
+  };
+
+  // Count active online services
+  const onlineCount = Object.values(servicesStatus).filter((s) => s.ok).length;
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="brand">
-          <div className="brand-logo">iL</div>
-          <div className="brand-text">
-            <h1>iLO Dashboard</h1>
-            <span className="subtitle">HPE Integrated Lights-Out fleet overview</span>
-          </div>
-        </div>
-        <div className="header-actions">
-          <div className="header-status">
-            <span className="pulse-dot" />
-            {endpoints.length} endpoint{endpoints.length === 1 ? '' : 's'} configured
-          </div>
-          <button
-            className="icon-btn"
-            onClick={() => setSettingsOpen(true)}
-            title="Settings"
-            aria-label="Settings"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {error && <div className="banner error">{error}</div>}
-
-      {settingsOpen && (
-        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-header">
-              <h2>Settings</h2>
-              <button
-                className="icon-btn"
-                onClick={() => setSettingsOpen(false)}
-                title="Close"
-                aria-label="Close settings"
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="settings-section">
-              <h3>Auto-Refresh</h3>
-              <p className="settings-hint">
-                How often to poll the iLOs for fresh telemetry. "Live" polls as
-                fast as is safe for the iLO.
-              </p>
-              <div className="layout-controls">
-                <div className="layout-control">
-                  <span className="layout-label">Interval</span>
-                  <div className="layout-buttons">
-                    <button
-                      className={`layout-btn ${refreshInterval === 0 ? 'active' : ''}`}
-                      onClick={() => setRefreshInterval(0)}
-                      title="Poll as fast as safe"
-                    >
-                      Live
-                    </button>
-                    {[15, 30, 60, 300].map((n) => (
-                      <button
-                        key={n}
-                        className={`layout-btn ${refreshInterval === n ? 'active' : ''}`}
-                        onClick={() => setRefreshInterval(n)}
-                      >
-                        {n}s
-                      </button>
-                    ))}
-                    <button
-                      className={`layout-btn ${refreshInterval === null ? 'active' : ''}`}
-                      onClick={() => setRefreshInterval(null)}
-                      title="Disable auto-refresh"
-                    >
-                      Off
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="settings-section">
-              <h3>Temperature Layout</h3>
-              <p className="settings-hint">
-                Adjust how the temperature groups are arranged inside each iLO card.
-              </p>
-              <div className="layout-controls">
-                <div className="layout-control">
-                  <span className="layout-label">Columns</span>
-                  <div className="layout-buttons">
-                    {[1, 2, 3, 4].map((n) => (
-                      <button
-                        key={n}
-                        className={`layout-btn ${tempColumns === n ? 'active' : ''}`}
-                        onClick={() => setTempColumns(n)}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="layout-control">
-                  <span className="layout-label">Rows</span>
-                  <div className="layout-buttons">
-                    {[1, 2, 3, 4].map((n) => (
-                      <button
-                        key={n}
-                        className={`layout-btn ${tempRows === n ? 'active' : ''}`}
-                        onClick={() => setTempRows(n)}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <EndpointManager
-              endpoints={endpoints}
-              onChange={() => {
-                loadEndpoints();
-                refresh();
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      <TelemetryDashboard
-        endpoints={endpoints}
-        telemetry={telemetry}
-        loading={loading}
-        lastUpdated={lastUpdated}
-        onRefresh={refresh}
-        tempColumns={tempColumns}
-        tempRows={tempRows}
-        refreshInterval={refreshInterval}
+    <div className={`homelab-app-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
+      {/* SIDEBAR NAVIGATION */}
+      <SidebarNav
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
+
+      {/* MAIN VIEW AREA */}
+      <div className="homelab-main-container">
+        <header className="homelab-top-header">
+          <div className="header-left">
+            <h1 className="header-page-title">
+              {activeTab === 'dashboard'
+                ? 'Homelab Command Center'
+                : activeTab === 'quicklinks'
+                ? 'Quick Launchpad'
+                : activeTab === 'ilo'
+                ? 'iLO & Hardware Telemetry'
+                : activeTab === 'infrastructure'
+                ? 'Hypervisors & Containers'
+                : activeTab === 'network'
+                ? 'Network & Security'
+                : activeTab === 'media'
+                ? 'Media & Streaming'
+                : activeTab === 'arrs'
+                ? 'Servarr Automation'
+                : activeTab === 'calendar'
+                ? 'Upcoming Release Calendar'
+                : activeTab === 'downloads'
+                ? 'Downloads & Queue'
+                : 'Homelab'}
+            </h1>
+            <span className="header-sub">
+              {onlineCount} service{onlineCount === 1 ? '' : 's'} responding • {endpoints.length} iLOs
+            </span>
+          </div>
+
+          <div className="header-right">
+            {lastUpdated && (
+              <span className="last-polled-text">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              className="btn secondary sm"
+              onClick={refreshAll}
+              disabled={loading}
+              title="Poll latest telemetry"
+            >
+              <Icon name="refresh" size={14} className={loading ? 'spin' : ''} />
+              <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+            </button>
+            <button
+              className="icon-btn-pill"
+              onClick={() => setSettingsOpen(true)}
+              title="Homelab System Settings"
+            >
+              <Icon name="settings" size={18} />
+            </button>
+          </div>
+        </header>
+
+        {error && <div className="banner error">{error}</div>}
+
+        <main className="homelab-content-body">
+          {activeTab === 'dashboard' ? (
+            <ConfigurableDashboard
+              config={homelabConfig}
+              servicesStatus={servicesStatus}
+              calendarItems={calendarItems}
+              iloEndpoints={endpoints}
+              iloTelemetry={telemetry}
+              loading={loading}
+              onRefresh={refreshAll}
+              onUpdateLayout={handleUpdateLayout}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          ) : (
+            <DedicatedCategoryView
+              category={activeTab}
+              config={homelabConfig}
+              servicesStatus={servicesStatus}
+              calendarItems={calendarItems}
+              iloEndpoints={endpoints}
+              iloTelemetry={telemetry}
+              loading={loading}
+              onRefresh={refreshAll}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onEndpointsChange={loadInitialData}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* SETTINGS MODAL */}
+      {settingsOpen && (
+        <HomelabSettingsModal
+          config={homelabConfig}
+          onClose={() => setSettingsOpen(false)}
+          onRefreshAll={refreshAll}
+          onUpdateConfig={(newCfg) => setHomelabConfig(newCfg)}
+        />
+      )}
     </div>
   );
 }

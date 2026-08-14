@@ -505,12 +505,12 @@ function Kpi({ label, value }: { label: string; value: string }) {
 
 /** SVG line chart for historical telemetry with labelled axes. */
 function HistoryChart({ samples }: { samples: HistorySample[] }) {
-  const width = 360;
-  const height = 130;
-  const padL = 42; // room for Y-axis labels
-  const padR = 10;
-  const padT = 12;
-  const padB = 24; // room for X-axis (time) labels
+  const width = 320;
+  const height = 96;
+  const padL = 40; // room for Y-axis labels
+  const padR = 8;
+  const padT = 10;
+  const padB = 20; // room for X-axis (time) labels
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
 

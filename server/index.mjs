@@ -16,6 +16,27 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'ssh2';
+import {
+  loadHomelabConfig,
+  saveHomelabConfig,
+  sanitizeServiceConfig,
+} from './configManager.mjs';
+import {
+  pollPeaNUT,
+  pollPlex,
+  pollTautulli,
+  pollAudiobookshelf,
+  pollSeer,
+  pollArr,
+  pollSABnzbd,
+  pollPve,
+  pollPbs,
+  pollPortainer,
+  pollUnifi,
+  pollOpnsense,
+  pollNginx,
+  pvePowerAction,
+} from './servicePollers.mjs';
 
 const PORT = Number(process.env.PORT || 3001);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -508,6 +529,81 @@ async function collectTelemetry(endpoint) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Generic Service Polling Dispatcher                                 */
+/* ------------------------------------------------------------------ */
+
+async function pollSingleService(service) {
+  const started = Date.now();
+  try {
+    let data = null;
+    switch (service.type) {
+      case 'peanut':
+        data = await pollPeaNUT(service);
+        break;
+      case 'plex':
+        data = await pollPlex(service);
+        break;
+      case 'tautulli':
+        data = await pollTautulli(service);
+        break;
+      case 'audiobookshelf':
+        data = await pollAudiobookshelf(service);
+        break;
+      case 'seer':
+        data = await pollSeer(service);
+        break;
+      case 'sonarr':
+      case 'radarr':
+      case 'lidarr':
+      case 'bazarr':
+        data = await pollArr(service, service.type);
+        break;
+      case 'sabnzbd':
+        data = await pollSABnzbd(service);
+        break;
+      case 'pve':
+        data = await pollPve(service);
+        break;
+      case 'pbs':
+        data = await pollPbs(service);
+        break;
+      case 'unifi':
+        data = await pollUnifi(service);
+        break;
+      case 'opnsense':
+        data = await pollOpnsense(service);
+        break;
+      case 'portainer':
+        data = await pollPortainer(service);
+        break;
+      case 'nginx':
+        data = await pollNginx(service);
+        break;
+      default:
+        throw new Error(`Unsupported service type: ${service.type}`);
+    }
+
+    return {
+      ok: true,
+      serviceId: service.id,
+      type: service.type,
+      fetchedAt: new Date().toISOString(),
+      latencyMs: Date.now() - started,
+      data,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      serviceId: service.id,
+      type: service.type,
+      fetchedAt: new Date().toISOString(),
+      latencyMs: Date.now() - started,
+      error: err.message || 'Failed to poll service',
+    };
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* HTTP server                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -516,8 +612,8 @@ function sendJson(res, status, body) {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   res.end(payload);
 }
@@ -546,6 +642,211 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === 'OPTIONS') return sendJson(res, 204, {});
+
+    /* ============================================================== */
+    /* Homelab Unified Config Routes                                  */
+    /* ============================================================== */
+
+    // GET /api/config
+    if (req.method === 'GET' && url.pathname === '/api/config') {
+      const cfg = loadHomelabConfig();
+      return sendJson(res, 200, {
+        ...cfg,
+        services: (cfg.services || []).map(sanitizeServiceConfig),
+      });
+    }
+
+    // PUT /api/config/layout
+    if (req.method === 'PUT' && url.pathname === '/api/config/layout') {
+      const body = await readBody(req);
+      const cfg = loadHomelabConfig();
+      if (body.dashboardLayout) cfg.dashboardLayout = body.dashboardLayout;
+      if (body.refreshInterval !== undefined) cfg.refreshInterval = body.refreshInterval;
+      if (body.theme) cfg.theme = body.theme;
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, { ok: true, layout: cfg.dashboardLayout });
+    }
+
+    // GET /api/quicklinks
+    if (req.method === 'GET' && url.pathname === '/api/quicklinks') {
+      const cfg = loadHomelabConfig();
+      return sendJson(res, 200, cfg.quickLinks || []);
+    }
+
+    // POST /api/quicklinks
+    if (req.method === 'POST' && url.pathname === '/api/quicklinks') {
+      const body = await readBody(req);
+      if (!body.title || !body.url) {
+        return sendJson(res, 400, { error: 'title and url are required' });
+      }
+      const cfg = loadHomelabConfig();
+      const newLink = {
+        id: body.id || `ql-${crypto.randomUUID().slice(0, 8)}`,
+        title: body.title.trim(),
+        url: body.url.trim(),
+        icon: body.icon?.trim() || 'globe',
+        category: body.category?.trim() || 'General',
+        description: body.description?.trim() || '',
+        openNewTab: body.openNewTab ?? true,
+      };
+      cfg.quickLinks = [...(cfg.quickLinks || []), newLink];
+      saveHomelabConfig(cfg);
+      return sendJson(res, 201, newLink);
+    }
+
+    // PUT /api/quicklinks/:id
+    if (req.method === 'PUT' && parts[0] === 'api' && parts[1] === 'quicklinks' && parts[2]) {
+      const body = await readBody(req);
+      const cfg = loadHomelabConfig();
+      const idx = (cfg.quickLinks || []).findIndex((l) => l.id === parts[2]);
+      if (idx === -1) return sendJson(res, 404, { error: 'Quick link not found' });
+      cfg.quickLinks[idx] = {
+        ...cfg.quickLinks[idx],
+        ...body,
+        id: parts[2],
+      };
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, cfg.quickLinks[idx]);
+    }
+
+    // DELETE /api/quicklinks/:id
+    if (req.method === 'DELETE' && parts[0] === 'api' && parts[1] === 'quicklinks' && parts[2]) {
+      const cfg = loadHomelabConfig();
+      cfg.quickLinks = (cfg.quickLinks || []).filter((l) => l.id !== parts[2]);
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // GET /api/services
+    if (req.method === 'GET' && url.pathname === '/api/services') {
+      const cfg = loadHomelabConfig();
+      return sendJson(res, 200, (cfg.services || []).map(sanitizeServiceConfig));
+    }
+
+    // POST /api/services
+    if (req.method === 'POST' && url.pathname === '/api/services') {
+      const body = await readBody(req);
+      if (!body.type || !body.name || !body.host) {
+        return sendJson(res, 400, { error: 'type, name and host are required' });
+      }
+      const cfg = loadHomelabConfig();
+      const newService = {
+        id: body.id || `svc-${crypto.randomUUID().slice(0, 8)}`,
+        type: body.type,
+        name: body.name.trim(),
+        category: body.category || 'overview',
+        host: body.host.trim(),
+        apiKey: body.apiKey?.trim() || undefined,
+        apiSecret: body.apiSecret?.trim() || undefined,
+        username: body.username?.trim() || undefined,
+        password: body.password || undefined,
+        sotf: Boolean(body.sotf),
+        disabled: Boolean(body.disabled),
+      };
+      cfg.services = [...(cfg.services || []), newService];
+      saveHomelabConfig(cfg);
+      return sendJson(res, 201, sanitizeServiceConfig(newService));
+    }
+
+    // PUT /api/services/:id
+    if (req.method === 'PUT' && parts[0] === 'api' && parts[1] === 'services' && parts[2]) {
+      const body = await readBody(req);
+      const cfg = loadHomelabConfig();
+      const idx = (cfg.services || []).findIndex((s) => s.id === parts[2]);
+      if (idx === -1) return sendJson(res, 404, { error: 'Service not found' });
+      const current = cfg.services[idx];
+      cfg.services[idx] = {
+        ...current,
+        name: body.name !== undefined ? body.name.trim() : current.name,
+        category: body.category !== undefined ? body.category : current.category,
+        host: body.host !== undefined ? body.host.trim() : current.host,
+        apiKey: body.apiKey !== undefined && body.apiKey !== '' ? body.apiKey.trim() : current.apiKey,
+        apiSecret: body.apiSecret !== undefined && body.apiSecret !== '' ? body.apiSecret.trim() : current.apiSecret,
+        username: body.username !== undefined ? body.username.trim() : current.username,
+        password: body.password !== undefined && body.password !== '' ? body.password : current.password,
+        sotf: body.sotf !== undefined ? Boolean(body.sotf) : current.sotf,
+        disabled: body.disabled !== undefined ? Boolean(body.disabled) : current.disabled,
+      };
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, sanitizeServiceConfig(cfg.services[idx]));
+    }
+
+    // DELETE /api/services/:id
+    if (req.method === 'DELETE' && parts[0] === 'api' && parts[1] === 'services' && parts[2]) {
+      const cfg = loadHomelabConfig();
+      cfg.services = (cfg.services || []).filter((s) => s.id !== parts[2]);
+      cfg.dashboardLayout.widgets = (cfg.dashboardLayout.widgets || []).filter((w) => w.serviceId !== parts[2]);
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // GET /api/services/status — poll all configured homelab services in parallel
+    if (req.method === 'GET' && url.pathname === '/api/services/status') {
+      const cfg = loadHomelabConfig();
+      const activeServices = (cfg.services || []).filter((s) => !s.disabled);
+      const results = await Promise.all(
+        activeServices.map((svc) => pollSingleService(svc))
+      );
+      const map = {};
+      results.forEach((r) => {
+        map[r.serviceId] = r;
+      });
+      return sendJson(res, 200, map);
+    }
+
+    // POST /api/services/:id/test
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'services' && parts[2] && parts[3] === 'test') {
+      const cfg = loadHomelabConfig();
+      const service = (cfg.services || []).find((s) => s.id === parts[2]);
+      if (!service) return sendJson(res, 404, { error: 'Service not found' });
+      const testRes = await pollSingleService(service);
+      return sendJson(res, 200, testRes);
+    }
+
+    // POST /api/services/:id/power — send a power action to a PVE VM/LXC
+    // Body: { vmid: number, action: 'start'|'stop'|'shutdown'|'reboot'|'reset' }
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'services' && parts[2] && parts[3] === 'power') {
+      const cfg = loadHomelabConfig();
+      const service = (cfg.services || []).find((s) => s.id === parts[2]);
+      if (!service) return sendJson(res, 404, { error: 'Service not found' });
+      if (service.type !== 'pve') {
+        return sendJson(res, 400, { error: 'Power control is only supported for Proxmox VE (pve) services' });
+      }
+      const body = await readBody(req);
+      if (body.vmid == null || !body.action) {
+        return sendJson(res, 400, { error: 'vmid and action are required' });
+      }
+      try {
+        const result = await pvePowerAction(service, body.vmid, body.action);
+        return sendJson(res, 200, result);
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message || 'Failed to send power action' });
+      }
+    }
+
+    // GET /api/arr/calendar — aggregate calendar entries from all configured Sonarr/Radarr/Lidarr services
+    if (req.method === 'GET' && url.pathname === '/api/arr/calendar') {
+      const cfg = loadHomelabConfig();
+      const arrServices = (cfg.services || []).filter(
+        (s) => !s.disabled && ['sonarr', 'radarr', 'lidarr'].includes(s.type)
+      );
+      const results = await Promise.all(
+        arrServices.map(async (svc) => {
+          try {
+            const data = await pollArr(svc, svc.type);
+            return (data.upcomingCalendar || []).map((item) => ({
+              ...item,
+              serviceName: svc.name,
+              serviceId: svc.id,
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+      const combined = results.flat().sort((a, b) => new Date(a.airDateUtc).getTime() - new Date(b.airDateUtc).getTime());
+      return sendJson(res, 200, combined);
+    }
 
     /* ---- GET /api/endpoints ---- */
     if (req.method === 'GET' && url.pathname === '/api/endpoints') {
