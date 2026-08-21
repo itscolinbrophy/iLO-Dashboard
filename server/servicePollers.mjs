@@ -724,6 +724,12 @@ export async function pollPve(service) {
       totalVms: vms.length,
       runningVms: vms.filter((v) => v.status === 'running').length,
       vms,
+      // Node health alerts for the notification engine
+      nodeAlerts: rawNodes
+        .filter((n) => n.status !== 'online')
+        .map((n) => ({ severity: 'critical', message: `PVE node ${n.node} is ${n.status || 'offline'}` })),
+      // Guests that stopped unexpectedly (crashed, not manually stopped)
+      stoppedVms: vms.filter((v) => v.status === 'stopped').map((v) => ({ vmid: v.vmid, name: v.name, type: v.type, node: v.node })),
     };
   } catch (err) {
     if (service.host.includes('demo') || service.host.includes('sample')) {
@@ -828,6 +834,117 @@ export async function pvePowerAction(service, vmid, action) {
   return { ok: true, vmid, action, node, type };
 }
 
+/**
+ * Create a new LXC container or QEMU VM on a Proxmox VE cluster.
+ * spec: { vmid?, hostname, node?, type: 'lxc'|'qemu', cores, memoryMb, diskGb,
+ *         storage, template (lxc) / iso (qemu), bridge, password?, sshKeys? , start? }
+ */
+export async function pveCreateGuest(service, spec) {
+  const base = service.host.replace(/\/+$/, '');
+  const authHeader = buildPveAuthHeader(service);
+  const headers = authHeader ? { Authorization: authHeader } : {};
+  const type = spec.type === 'qemu' ? 'qemu' : 'lxc';
+
+  // Resolve target node (explicit, first online, or least-loaded)
+  let node = spec.node;
+  if (!node) {
+    const nodesRes = await httpRequestJson(`${base}/api2/json/nodes`, { headers, timeout: 8000 });
+    const nodes = (nodesRes.data || []).filter((n) => n.status === 'online');
+    nodes.sort((a, b) => (a.cpu || 0) - (b.cpu || 0));
+    node = nodes[0]?.node;
+  }
+  if (!node) throw new Error('No online PVE node available');
+
+  // Auto-allocate next free VMID when not provided
+  let vmid = Number(spec.vmid);
+  if (!vmid) {
+    const nextRes = await httpRequestJson(`${base}/api2/json/cluster/nextid`, { headers, timeout: 8000 });
+    vmid = Number(typeof nextRes === 'string' ? nextRes : nextRes.data);
+  }
+  if (!vmid) throw new Error('Could not allocate a free VMID');
+
+  const body = {};
+
+  if (type === 'lxc') {
+    // LXC container creation requires an OSTemplate volume path
+    if (!spec.template) throw new Error('An OSTemplate volume is required to create an LXC container');
+    Object.assign(body, {
+      ostemplate: spec.template,
+      hostname: spec.hostname || `ct${vmid}`,
+      cores: Number(spec.cores) || 1,
+      memory: Number(spec.memoryMb) || 512,
+      rootfs: `${spec.storage || 'local-lvm'}:${Number(spec.diskGb) || 8}`,
+      password: spec.password || undefined,
+      'ssh-public-keys': spec.sshKeys || undefined,
+      unprivileged: spec.unprivileged !== false ? 1 : 0,
+      net0: `name=eth0,bridge=${spec.bridge || 'vmbr0'},ip=dhcp,firewall=1`,
+      start: spec.start ? 1 : 0,
+      description: spec.description || 'Created by iLO Dashboard',
+    });
+  } else {
+    // QEMU VM creation
+    Object.assign(body, {
+      vmid,
+      name: spec.hostname || `vm${vmid}`,
+      cores: Number(spec.cores) || 1,
+      memory: Number(spec.memoryMb) || 2048,
+      scsihw: 'virtio-scsi-pci',
+      sata0: spec.iso ? `${spec.iso},media=cdrom` : undefined,
+      scsi0: `${spec.storage || 'local-lvm'}:${Number(spec.diskGb) || 32}`,
+      net0: `virtio,bridge=${spec.bridge || 'vmbr0'}`,
+      agent: 1,
+      start: spec.start ? 1 : 0,
+      description: spec.description || 'Created by iLO Dashboard',
+    });
+    if (spec.password) body.password = spec.password; // only valid with an installer ISO
+  }
+
+  // Strip undefined values (httpRequestJson JSON-stringifies the body)
+  Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
+
+  const endpoint = `${base}/api2/json/nodes/${encodeURIComponent(node)}/${type}`;
+  const res = await httpRequestJson(endpoint, { method: 'POST', headers, body, timeout: 15000 });
+
+  return { ok: true, vmid, node, type, upid: res?.data || null };
+}
+
+/**
+ * List available storage volumes on a PVE node — used for template/ISO pickers.
+ */
+export async function pveListStorageContent(service, node, content) {
+  const base = service.host.replace(/\/+$/, '');
+  const authHeader = buildPveAuthHeader(service);
+  const headers = authHeader ? { Authorization: authHeader } : {};
+
+  let nodes = [node];
+  if (!node) {
+    const nodesRes = await httpRequestJson(`${base}/api2/json/nodes`, { headers, timeout: 8000 });
+    nodes = (nodesRes.data || []).filter((n) => n.status === 'online').map((n) => n.node);
+  }
+
+  const results = [];
+  for (const n of nodes.slice(0, 3)) {
+    try {
+      const res = await httpRequestJson(
+        `${base}/api2/json/nodes/${encodeURIComponent(n)}/storage?content=${content}&enabled=1`,
+        { headers, timeout: 8000 }
+      );
+      for (const st of res.data || []) {
+        try {
+          const volRes = await httpRequestJson(
+            `${base}/api2/json/nodes/${encodeURIComponent(n)}/storage/${encodeURIComponent(st.storage)}/content?content=${content}`,
+            { headers, timeout: 8000 }
+          );
+          for (const v of volRes.data || []) {
+            results.push({ node: n, storage: st.storage, volid: v.volid, text: v.volid.split('/').pop() });
+          }
+        } catch { /* skip inaccessible storages */ }
+      }
+    } catch { /* skip offline nodes */ }
+  }
+  return results;
+}
+
 /** Proxmox Backup Server (PBS) */
 export async function pollPbs(service) {
   const base = service.host.replace(/\/+$/, '');
@@ -854,9 +971,11 @@ export async function pollPbs(service) {
   const headers = authHeader ? { Authorization: authHeader } : {};
 
   try {
-    const [storesListRes, tasksRes] = await Promise.all([
+    const [storesListRes, tasksRes, failedRes] = await Promise.all([
       httpRequestJson(`${base}/api2/json/admin/datastore`, { headers, timeout: 6000 }),
       httpRequestJson(`${base}/api2/json/nodes/localhost/tasks?limit=5`, { headers, timeout: 6000 }).catch(() => ({ data: [] })),
+      // Recent failed tasks — the source of backup-failure alerts
+      httpRequestJson(`${base}/api2/json/nodes/localhost/tasks?limit=20&statusfilter=finished&errors=1`, { headers, timeout: 6000 }).catch(() => ({ data: [] })),
     ]);
 
     const rawStores = storesListRes.data || [];
@@ -899,6 +1018,18 @@ export async function pollPbs(service) {
         starttime: t.starttime || Date.now() / 1000,
         status: t.status || 'OK',
       })),
+      // Failed / errored tasks for the alert engine
+      failedTasks: (failedRes.data || [])
+        .filter((t) => t.status && !/^OK/i.test(t.status))
+        .slice(0, 10)
+        .map((t) => ({
+          upid: t.upid,
+          workerType: t.worker_type || 'backup',
+          id: t.worker_id || t.upid || 'task',
+          starttime: t.starttime || 0,
+          endtime: t.endtime || 0,
+          status: t.status || 'FAILED',
+        })),
     };
   } catch (err) {
     if (service.host.includes('demo') || service.host.includes('sample')) {

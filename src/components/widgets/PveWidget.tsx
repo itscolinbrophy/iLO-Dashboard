@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Icon } from '../common/Icon';
 import { sendPvePowerAction } from '../../api/homelabClient';
+import { WebTerminal, type ShellTarget } from '../WebTerminal';
+import { CreateGuestModal } from '../CreateGuestModal';
 import type { PveStatus, PbsStatus, ServiceDataResponse } from '../../types/homelab';
 
 interface PveWidgetProps {
@@ -30,6 +32,8 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
   const vms = data?.vms || [];
   const [busyVmid, setBusyVmid] = useState<number | null>(null);
   const [actionMsg, setActionMsg] = useState<Record<number, string>>({});
+  const [shellTarget, setShellTarget] = useState<ShellTarget | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const handlePowerAction = async (vm: { vmid: number; name: string; status: string }, action: PowerAction) => {
     if (!serviceId) {
@@ -81,6 +85,14 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
           <span>{data?.runningVms ?? 0} / {data?.totalVms ?? 0} Running</span>
         </div>
       </div>
+
+      {serviceId && (
+        <div className="pve-toolbar">
+          <button className="btn secondary sm" onClick={() => setShowCreate(true)}>
+            + New Container / VM
+          </button>
+        </div>
+      )}
 
       {!isOk && !loading ? (
         <div className="widget-error-state">
@@ -156,24 +168,22 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
                     {actionMsg[vm.vmid] && (
                       <span className="vm-action-msg text-muted">{actionMsg[vm.vmid]}</span>
                     )}
-                    <a
+                    <button
                       className="vm-power-btn"
-                      title={`Open terminal for ${vm.name}`}
-                      href={`https://${data?.nodes?.[0]?.node ? '' : ''}${window.location.hostname}/?console=${vm.vmid}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const pveHost = window.prompt(`Enter the Proxmox host for ${vm.name} (${vm.type.toUpperCase()} ${vm.vmid}):`, 'https://192.168.8.252:8006');
-                        if (pveHost) {
-                          window.open(
-                            `${pveHost}/?console=${vm.type}&vmid=${vm.vmid}&node=${vm.node}`,
-                            '_blank',
-                            'noopener'
-                          );
-                        }
-                      }}
+                      title={`Open shell for ${vm.name}`}
+                      disabled={!serviceId}
+                      onClick={() =>
+                        setShellTarget({
+                          serviceId: serviceId!,
+                          vmid: vm.vmid,
+                          type: vm.type,
+                          node: vm.node,
+                          title: `${vm.name} (${vm.type === 'qemu' ? 'VM' : 'LXC'} ${vm.vmid})`,
+                        })
+                      }
                     >
                       <Icon name="terminal" size={13} />
-                    </a>
+                    </button>
                     <button
                       className="vm-power-btn"
                       title={`Start ${vm.name}`}
@@ -212,6 +222,22 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
             </div>
           </div>
         </div>
+      )}
+
+      {shellTarget && (
+        <WebTerminal target={shellTarget} onClose={() => setShellTarget(null)} />
+      )}
+      {showCreate && serviceId && (
+        <CreateGuestModal
+          serviceId={serviceId}
+          nodes={nodes.map((n) => ({ node: n.node, status: n.status }))}
+          onClose={() => setShowCreate(false)}
+          onCreated={(vmid) => {
+            setShowCreate(false);
+            setActionMsg((m) => ({ ...m, [vmid]: '✓ created' }));
+            setTimeout(() => onRefresh && onRefresh(), 1500);
+          }}
+        />
       )}
     </div>
   );

@@ -90,6 +90,67 @@ export function sendPvePowerAction(
   });
 }
 
+/* ---------------- PVE guest creation ---------------- */
+
+export interface CreateGuestSpec {
+  type: 'lxc' | 'qemu';
+  hostname: string;
+  node?: string;
+  vmid?: number;
+  cores: number;
+  memoryMb: number;
+  diskGb: number;
+  storage?: string;
+  template?: string;
+  iso?: string;
+  bridge?: string;
+  password?: string;
+  sshKeys?: string;
+  start?: boolean;
+  description?: string;
+}
+
+/** Create a new LXC container or QEMU VM on a PVE cluster. */
+export function createPveGuest(
+  id: string,
+  spec: CreateGuestSpec
+): Promise<{ ok: boolean; vmid?: number; node?: string; upid?: string; error?: string }> {
+  return request(`/services/${id}/guests`, {
+    method: 'POST',
+    body: JSON.stringify(spec),
+  });
+}
+
+/** List LXC templates or ISO images available on the cluster. */
+export function fetchStorageContent(
+  id: string,
+  content: 'vztmpl' | 'iso',
+  node?: string
+): Promise<{ ok: boolean; items: Array<{ node: string; storage: string; volid: string; text: string }>; error?: string }> {
+  const params = new URLSearchParams({ content });
+  if (node) params.set('node', node);
+  return request(`/services/${id}/storage-content?${params.toString()}`);
+}
+
+/* ---------------- Alerts (PVE / PBS / services) ---------------- */
+
+export interface DashboardAlert {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  source: string;
+  message: string;
+  ts: number;
+  acknowledged?: boolean;
+}
+
+export function fetchAlerts(): Promise<{ alerts: DashboardAlert[]; unacknowledged: number; evaluatedAt: number }> {
+  return request('/alerts');
+}
+
+export function acknowledgeAlerts(body: { id?: string; all?: boolean }): Promise<{ ok: boolean }> {
+  return request('/alerts/ack', { method: 'POST', body: JSON.stringify(body) });
+}
+
 /* ---------------- Live Telemetry & Calendar ---------------- */
 
 export function fetchServicesStatus(): Promise<Record<string, ServiceDataResponse>> {

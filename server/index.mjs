@@ -16,6 +16,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'ssh2';
+import { WebSocketServer } from 'ws';
 import {
   loadHomelabConfig,
   saveHomelabConfig,
@@ -36,6 +37,8 @@ import {
   pollOpnsense,
   pollNginx,
   pvePowerAction,
+  pveCreateGuest,
+  pveListStorageContent,
 } from './servicePollers.mjs';
 
 const PORT = Number(process.env.PORT || 3001);
@@ -188,6 +191,226 @@ function sshExec(host, username, password, command) {
         ],
       },
     });
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Alert engine — evaluates PVE / PBS / service health into alerts     */
+/* ------------------------------------------------------------------ */
+
+// In-memory alert state: { id, severity, source, message, ts, acknowledged }
+let alertState = [];
+let lastAlertEval = 0;
+
+/** Evaluate the latest poll results into a flat alert list. */
+async function evaluateAlerts() {
+  const cfg = loadHomelabConfig();
+  const alerts = [];
+  const now = Date.now();
+
+  const pveServices = (cfg.services || []).filter((s) => s.type === 'pve' && !s.disabled);
+  const pbsServices = (cfg.services || []).filter((s) => s.type === 'pbs' && !s.disabled);
+
+  await Promise.all([
+    ...pveServices.map(async (svc) => {
+      try {
+        const data = await pollPve(svc);
+        // Node offline / degraded
+        for (const n of data.nodes || []) {
+          if (n.status !== 'online') {
+            alerts.push({
+              id: `pve-node-${svc.id}-${n.node}`,
+              severity: 'critical',
+              source: `PVE · ${svc.name}`,
+              message: `Node ${n.node} is ${n.status || 'offline'}`,
+              ts: now,
+            });
+          } else {
+            const memPct = Math.round(((n.memUsedBytes || 0) / (n.memTotalBytes || 1)) * 100);
+            if (memPct >= 90) {
+              alerts.push({
+                id: `pve-mem-${svc.id}-${n.node}`,
+                severity: 'warning',
+                source: `PVE · ${svc.name}`,
+                message: `Node ${n.node} memory at ${memPct}%`,
+                ts: now,
+              });
+            }
+          }
+        }
+        // Guests unexpectedly stopped (crashed) — only flag qemu/lxc that are
+        // stopped AND were running recently is unknowable, so flag stopped
+        // guests whose onboot config would normally keep them running. We keep
+        // this informational to avoid noise.
+        const stopped = (data.vms || []).filter((v) => v.status === 'stopped');
+        if (stopped.length > 0) {
+          alerts.push({
+            id: `pve-stopped-${svc.id}`,
+            severity: 'info',
+            source: `PVE · ${svc.name}`,
+            message: `${stopped.length} guest${stopped.length > 1 ? 's' : ''} stopped: ${stopped.slice(0, 4).map((v) => v.name).join(', ')}${stopped.length > 4 ? '…' : ''}`,
+            ts: now,
+          });
+        }
+      } catch (err) {
+        alerts.push({
+          id: `pve-conn-${svc.id}`,
+          severity: 'critical',
+          source: `PVE · ${svc.name}`,
+          message: `Connection failed: ${err.message || 'unreachable'}`,
+          ts: now,
+        });
+      }
+    }),
+    ...pbsServices.map(async (svc) => {
+      try {
+        const data = await pollPbs(svc);
+        // Datastore capacity warnings
+        for (const ds of data.datastores || []) {
+          if (ds.usagePercent >= 90) {
+            alerts.push({
+              id: `pbs-ds-${svc.id}-${ds.store}`,
+              severity: ds.usagePercent >= 95 ? 'critical' : 'warning',
+              source: `PBS · ${svc.name}`,
+              message: `Datastore ${ds.store} at ${ds.usagePercent}% capacity`,
+              ts: now,
+            });
+          }
+        }
+        // Failed backup tasks
+        for (const t of (data.failedTasks || []).slice(0, 5)) {
+          alerts.push({
+            id: `pbs-task-${svc.id}-${t.upid || t.id}-${t.starttime}`,
+            severity: 'critical',
+            source: `PBS · ${svc.name}`,
+            message: `Backup failed: ${t.workerType} ${t.id} (${t.status})`,
+            ts: now,
+          });
+        }
+      } catch (err) {
+        alerts.push({
+          id: `pbs-conn-${svc.id}`,
+          severity: 'critical',
+          source: `PBS · ${svc.name}`,
+          message: `Connection failed: ${err.message || 'unreachable'}`,
+          ts: now,
+        });
+      }
+    }),
+  ]);
+
+  // Service-down alerts for every other configured service (iLO endpoints are
+  // managed through the legacy endpoints system, so skip them here)
+  const otherServices = (cfg.services || []).filter(
+    (s) => !s.disabled && !['pve', 'pbs', 'custom_iframe', 'ilo'].includes(s.type)
+  );
+  const results = await Promise.all(
+    otherServices.map(async (svc) => {
+      try {
+        const r = await pollSingleService(svc);
+        if (!r.ok) {
+          return {
+            id: `svc-down-${svc.id}`,
+            severity: 'warning',
+            source: svc.name,
+            message: `Service unreachable: ${r.error || 'poll failed'}`,
+            ts: now,
+          };
+        }
+      } catch {
+        return {
+          id: `svc-down-${svc.id}`,
+          severity: 'warning',
+          source: svc.name,
+          message: 'Service unreachable',
+          ts: now,
+        };
+      }
+      return null;
+    })
+  );
+  alerts.push(...results.filter(Boolean));
+
+  // Preserve acknowledged state across evaluations
+  const prevAck = new Map(alertState.map((a) => [a.id, a]));
+  alertState = alerts.map((a) => ({
+    ...a,
+    acknowledged: prevAck.get(a.id)?.acknowledged || false,
+  }));
+  lastAlertEval = now;
+  return alertState;
+}
+
+/* ------------------------------------------------------------------ */
+/* Interactive SSH shell over WebSocket (remote container/host shell)  */
+/* ------------------------------------------------------------------ */
+
+const SSH_ALGOS = {
+  kex: [
+    'diffie-hellman-group14-sha1',
+    'diffie-hellman-group-exchange-sha256',
+    'ecdh-sha2-nistp256',
+    'ecdh-sha2-nistp384',
+    'ecdh-sha2-nistp521',
+  ],
+  cipher: ['aes128-ctr', 'aes192-ctr', 'aes256-ctr', 'aes128-cbc', 'aes256-cbc'],
+  serverHostKey: ['ssh-rsa', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ssh-dss'],
+  hmac: ['hmac-sha2-256', 'hmac-sha1', 'hmac-sha2-512'],
+};
+
+/**
+ * Bridge a browser WebSocket to an interactive SSH shell on a target host.
+ * For LXC containers we SSH to the PVE host and run `pct enter <vmid>`;
+ * for QEMU VMs we open a shell on the PVE host (user can then `qm terminal`).
+ */
+function bridgeSshShell(ws, { host, port = 22, username, password, command }) {
+  const conn = new Client();
+  let stream = null;
+
+  const cleanup = () => {
+    try { stream?.end(); } catch { /* noop */ }
+    try { conn.end(); } catch { /* noop */ }
+    try { ws.close(); } catch { /* noop */ }
+  };
+
+  ws.on('message', (raw) => {
+    const msg = raw.toString();
+    if (msg === '\u0000close') return cleanup();
+    try { stream?.write(msg); } catch { /* noop */ }
+  });
+  ws.on('close', cleanup);
+  ws.on('error', cleanup);
+
+  conn.on('ready', () => {
+    conn.shell({ term: 'xterm-256color', cols: 100, rows: 30 }, (err, s) => {
+      if (err) {
+        ws.send(`\r\n\x1b[31mShell error: ${err.message}\x1b[0m\r\n`);
+        return cleanup();
+      }
+      stream = s;
+      ws.send('\u0000ready');
+      s.on('data', (d) => { try { ws.send(d.toString()); } catch { /* noop */ } });
+      s.stderr.on('data', (d) => { try { ws.send(d.toString()); } catch { /* noop */ } });
+      s.on('close', () => {
+        try { ws.send('\r\n\x1b[33m[session closed]\x1b[0m\r\n'); } catch { /* noop */ }
+        cleanup();
+      });
+      // Auto-enter a container when requested (pct enter <vmid>)
+      if (command) s.write(`${command}\n`);
+    });
+  });
+  conn.on('error', (err) => {
+    try { ws.send(`\r\n\x1b[31mSSH error: ${err.message}\x1b[0m\r\n`); } catch { /* noop */ }
+    cleanup();
+  });
+
+  conn.connect({
+    host,
+    port: Number(port) || 22,
+    username,
+    password,
+    readyTimeout: 15000,
+    algorithms: SSH_ALGOS,
   });
 }
 
@@ -824,6 +1047,71 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // POST /api/services/:id/guests — create a new LXC container or QEMU VM
+    // Body: { type: 'lxc'|'qemu', hostname, node?, vmid?, cores, memoryMb, diskGb,
+    //         storage?, template? (lxc), iso? (qemu), bridge?, password?, sshKeys?, start? }
+    if (req.method === 'POST' && parts[0] === 'api' && parts[1] === 'services' && parts[2] && parts[3] === 'guests') {
+      const cfg = loadHomelabConfig();
+      const service = (cfg.services || []).find((s) => s.id === parts[2]);
+      if (!service) return sendJson(res, 404, { error: 'Service not found' });
+      if (service.type !== 'pve') {
+        return sendJson(res, 400, { error: 'Guest creation is only supported for Proxmox VE (pve) services' });
+      }
+      const body = await readBody(req);
+      if (!body.hostname || !body.type) {
+        return sendJson(res, 400, { error: 'hostname and type (lxc|qemu) are required' });
+      }
+      try {
+        const result = await pveCreateGuest(service, body);
+        return sendJson(res, 200, result);
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message || 'Failed to create guest' });
+      }
+    }
+
+    // GET /api/services/:id/storage-content?content=vztmpl|iso — list templates/ISOs
+    if (req.method === 'GET' && parts[0] === 'api' && parts[1] === 'services' && parts[2] && parts[3] === 'storage-content') {
+      const cfg = loadHomelabConfig();
+      const service = (cfg.services || []).find((s) => s.id === parts[2]);
+      if (!service) return sendJson(res, 404, { error: 'Service not found' });
+      if (service.type !== 'pve') {
+        return sendJson(res, 400, { error: 'Only supported for Proxmox VE (pve) services' });
+      }
+      const content = url.searchParams.get('content') || 'vztmpl';
+      try {
+        const items = await pveListStorageContent(service, url.searchParams.get('node'), content);
+        return sendJson(res, 200, { ok: true, items });
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, items: [], error: err.message || 'Failed to list storage' });
+      }
+    }
+
+    // GET /api/alerts — evaluate + return current PVE/PBS/service alerts
+    if (req.method === 'GET' && url.pathname === '/api/alerts') {
+      try {
+        // Re-evaluate at most every 30 seconds; otherwise serve cached state.
+        if (Date.now() - lastAlertEval > 30_000) await evaluateAlerts();
+        return sendJson(res, 200, {
+          alerts: alertState,
+          unacknowledged: alertState.filter((a) => !a.acknowledged).length,
+          evaluatedAt: lastAlertEval,
+        });
+      } catch (err) {
+        return sendJson(res, 500, { error: err.message || 'Failed to evaluate alerts' });
+      }
+    }
+
+    // POST /api/alerts/ack — acknowledge one alert ({ id }) or all ({ all: true })
+    if (req.method === 'POST' && url.pathname === '/api/alerts/ack') {
+      const body = await readBody(req);
+      if (body.all) {
+        alertState = alertState.map((a) => ({ ...a, acknowledged: true }));
+      } else if (body.id) {
+        alertState = alertState.map((a) => (a.id === body.id ? { ...a, acknowledged: true } : a));
+      }
+      return sendJson(res, 200, { ok: true, alerts: alertState });
+    }
+
     // GET /api/arr/calendar — aggregate calendar entries from all configured Sonarr/Radarr/Lidarr services
     if (req.method === 'GET' && url.pathname === '/api/arr/calendar') {
       const cfg = loadHomelabConfig();
@@ -1007,4 +1295,83 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`iLO Dashboard backend listening on http://localhost:${PORT}`);
+});
+
+/* ------------------------------------------------------------------ */
+/* WebSocket endpoint: /ws/shell — interactive SSH terminal bridge     */
+/* ------------------------------------------------------------------ */
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url, `http://localhost:${PORT}`);
+  if (url.pathname !== '/ws/shell') {
+    socket.destroy();
+    return;
+  }
+
+  // Auth + target come from the query string; the browser never talks to the
+  // SSH host directly, this server brokers the whole session.
+  const cfg = loadHomelabConfig();
+  const serviceId = url.searchParams.get('serviceId');
+  const vmid = url.searchParams.get('vmid');
+  const service = (cfg.services || []).find((s) => s.id === serviceId);
+
+  if (!service || service.type !== 'pve') {
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  // Resolve the PVE host SSH target. The service host is the web API
+  // (https://host:8006); SSH lives on the same hostname at port 22.
+  let sshHost;
+  try {
+    sshHost = new URL(service.host).hostname;
+  } catch {
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  const username = url.searchParams.get('username') || service.username || 'root';
+  const password = url.searchParams.get('password') || service.password || '';
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    // If neither the request nor the stored service config carries an SSH
+    // password, ask the browser for credentials instead of failing blindly.
+    if (!password) {
+      ws.once('message', (raw) => {
+        try {
+          const creds = JSON.parse(raw.toString());
+          const node = url.searchParams.get('node');
+          const command = vmid && url.searchParams.get('type') === 'lxc'
+            ? `pct enter ${vmid}`
+            : node
+              ? `ssh -o StrictHostKeyChecking=no root@${node}`
+              : undefined;
+          bridgeSshShell(ws, {
+            host: sshHost,
+            port: 22,
+            username: creds.username || username,
+            password: creds.password || '',
+            command,
+          });
+        } catch {
+          ws.close();
+        }
+      });
+      ws.send('\u0000needauth');
+      return;
+    }
+
+    // For LXC containers, enter the container via pct; for the host or a VM,
+    // drop straight into a root shell on the PVE node.
+    const node = url.searchParams.get('node');
+    const command = vmid && url.searchParams.get('type') === 'lxc'
+      ? `pct enter ${vmid}`
+      : node
+        ? `ssh -o StrictHostKeyChecking=no root@${node}`
+        : undefined;
+    bridgeSshShell(ws, { host: sshHost, port: 22, username, password, command });
+  });
 });

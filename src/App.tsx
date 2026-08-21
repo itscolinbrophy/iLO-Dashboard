@@ -10,6 +10,7 @@ import { SidebarNav } from './components/SidebarNav';
 import { ConfigurableDashboard } from './components/ConfigurableDashboard';
 import { DedicatedCategoryView } from './components/DedicatedCategoryView';
 import { HomelabSettingsModal } from './components/HomelabSettingsModal';
+import { NotificationBell } from './components/NotificationBell';
 import { Icon } from './components/common/Icon';
 import type { IloEndpoint, TelemetryMap } from './types/ilo';
 import type {
@@ -172,6 +173,7 @@ function App() {
               <Icon name="refresh" size={14} className={loading ? 'spin' : ''} />
               <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
             </button>
+            <NotificationBell refreshKey={loading ? 1 : 0} />
             <button
               className="icon-btn-pill"
               onClick={() => setSettingsOpen(true)}
