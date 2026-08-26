@@ -23,6 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'infrastructure', label: 'Proxmox & Docker', icon: 'server' },
   { id: 'network', label: 'Network & Firewall', icon: 'shield' },
   { id: 'media', label: 'Media & Streaming', icon: 'play' },
+  { id: 'music', label: 'Spotify Music Sync', icon: 'music' },
   { id: 'arrs', label: 'Servarr Automation', icon: 'tv' },
   { id: 'calendar', label: 'Release Calendar', icon: 'calendar' },
   { id: 'downloads', label: 'Downloads & Queue', icon: 'download' },

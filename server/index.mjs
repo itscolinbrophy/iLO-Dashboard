@@ -21,7 +21,20 @@ import {
   loadHomelabConfig,
   saveHomelabConfig,
   sanitizeServiceConfig,
+  sanitizeSpotifyConfig,
 } from './configManager.mjs';
+import {
+  hasSpotifyCredentials,
+  searchSpotifyPlaylists,
+  fetchSpotifyPlaylist,
+} from './spotify.mjs';
+import {
+  pickLidarrService,
+  buildLidarrIndex,
+  matchTracks,
+  lookupLidarrArtist,
+  addArtistToLidarr,
+} from './musicMatch.mjs';
 import {
   pollPeaNUT,
   pollPlex,
@@ -875,6 +888,7 @@ const server = http.createServer(async (req, res) => {
       const cfg = loadHomelabConfig();
       return sendJson(res, 200, {
         ...cfg,
+        spotify: sanitizeSpotifyConfig(cfg.spotify),
         services: (cfg.services || []).map(sanitizeServiceConfig),
       });
     }
@@ -1134,6 +1148,128 @@ const server = http.createServer(async (req, res) => {
       );
       const combined = results.flat().sort((a, b) => new Date(a.airDateUtc).getTime() - new Date(b.airDateUtc).getTime());
       return sendJson(res, 200, combined);
+    }
+
+    /* ---- GET /api/music/config ---- */
+    if (req.method === 'GET' && url.pathname === '/api/music/config') {
+      const cfg = loadHomelabConfig();
+      return sendJson(res, 200, sanitizeSpotifyConfig(cfg.spotify));
+    }
+
+    // PUT /api/music/config
+    if (req.method === 'PUT' && url.pathname === '/api/music/config') {
+      const body = await readBody(req);
+      const cfg = loadHomelabConfig();
+      const current = cfg.spotify || {};
+      cfg.spotify = {
+        clientId: body.clientId !== undefined ? String(body.clientId).trim() : current.clientId,
+        clientSecret: body.clientSecret !== undefined && body.clientSecret !== '' ? String(body.clientSecret).trim() : current.clientSecret,
+        lidarrRootFolder: body.lidarrRootFolder !== undefined ? String(body.lidarrRootFolder).trim() : current.lidarrRootFolder,
+        lidarrQualityProfileId: body.lidarrQualityProfileId !== undefined ? body.lidarrQualityProfileId : current.lidarrQualityProfileId,
+        lidarrMetadataProfileId: body.lidarrMetadataProfileId !== undefined ? body.lidarrMetadataProfileId : current.lidarrMetadataProfileId,
+      };
+      saveHomelabConfig(cfg);
+      return sendJson(res, 200, sanitizeSpotifyConfig(cfg.spotify));
+    }
+
+    // GET /api/music/search?q=... — search public Spotify playlists
+    if (req.method === 'GET' && url.pathname === '/api/music/search') {
+      const cfg = loadHomelabConfig();
+      const spotify = cfg.spotify || {};
+      const q = url.searchParams.get('q') || '';
+      if (!hasSpotifyCredentials(spotify)) {
+        return sendJson(res, 400, { error: 'Spotify credentials not configured. Set them in Settings → Music.' });
+      }
+      try {
+        const playlists = await searchSpotifyPlaylists(spotify, q);
+        return sendJson(res, 200, { ok: true, playlists });
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, playlists: [], error: err.message || 'Spotify search failed' });
+      }
+    }
+
+    // GET /api/music/compare?playlist=<url|id> — fetch + compare a Spotify playlist against Lidarr
+    if (req.method === 'GET' && url.pathname === '/api/music/compare') {
+      const cfg = loadHomelabConfig();
+      const spotify = cfg.spotify || {};
+      const input = url.searchParams.get('playlist') || '';
+      if (!hasSpotifyCredentials(spotify)) {
+        return sendJson(res, 400, { error: 'Spotify credentials not configured. Set them in Settings → Music.' });
+      }
+      if (!input) return sendJson(res, 400, { error: 'playlist is required' });
+
+      try {
+        const lidarrService = pickLidarrService(cfg);
+        if (!lidarrService) {
+          return sendJson(res, 400, {
+            error: 'No enabled Lidarr service is configured. Add one in Settings → Services.',
+          });
+        }
+
+        const [playlist, index] = await Promise.all([
+          fetchSpotifyPlaylist(spotify, input),
+          buildLidarrIndex(lidarrService),
+        ]);
+        const tracks = matchTracks(playlist.tracks, index);
+
+        const counts = tracks.reduce(
+          (acc, t) => {
+            acc[t.status] = (acc[t.status] || 0) + 1;
+            return acc;
+          },
+          { exists: 0, missing: 0, missingAlbum: 0 }
+        );
+
+        return sendJson(res, 200, {
+          ok: true,
+          playlist: { id: playlist.id, name: playlist.name, url: playlist.url, imageUrl: playlist.imageUrl, owner: playlist.owner, trackCount: playlist.trackCount },
+          tracks,
+          counts,
+        });
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message || 'Comparison failed' });
+      }
+    }
+
+    // GET /api/music/lookup?term=... — Lidarr artist lookup (debugging / pre-flight)
+    if (req.method === 'GET' && url.pathname === '/api/music/lookup') {
+      const cfg = loadHomelabConfig();
+      const lidarrService = pickLidarrService(cfg);
+      const term = url.searchParams.get('term') || '';
+      if (!lidarrService) return sendJson(res, 400, { error: 'No enabled Lidarr service configured' });
+      try {
+        const results = await lookupLidarrArtist(lidarrService, term);
+        return sendJson(res, 200, { ok: true, results: results.slice(0, 8) });
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message || 'Lookup failed' });
+      }
+    }
+
+    // POST /api/music/artist — add a missing artist to Lidarr.  Body: { name, qualityProfileId?, metadataProfileId?, rootFolderPath?, monitor?, searchForNewAlbum? }
+    if (req.method === 'POST' && url.pathname === '/api/music/artist') {
+      const body = await readBody(req);
+      const cfg = loadHomelabConfig();
+      const lidarrService = pickLidarrService(cfg);
+      if (!lidarrService) {
+        return sendJson(res, 400, { error: 'No enabled Lidarr service configured' });
+      }
+      if (!body.name || !String(body.name).trim()) {
+        return sendJson(res, 400, { error: 'name is required' });
+      }
+      const spotify = cfg.spotify || {};
+      const defaults = {
+        rootFolderPath: body.rootFolderPath ?? spotify.lidarrRootFolder,
+        qualityProfileId: body.qualityProfileId ?? spotify.lidarrQualityProfileId,
+        metadataProfileId: body.metadataProfileId ?? spotify.lidarrMetadataProfileId,
+        monitor: body.monitor !== false,
+        searchForNewAlbum: body.searchForNewAlbum !== false,
+      };
+      try {
+        const artist = await addArtistToLidarr(lidarrService, String(body.name).trim(), defaults);
+        return sendJson(res, 200, { ok: true, artistId: artist.id || null, name: artist.artistName || body.name });
+      } catch (err) {
+        return sendJson(res, 200, { ok: false, error: err.message || 'Failed to add artist to Lidarr' });
+      }
     }
 
     /* ---- GET /api/endpoints ---- */

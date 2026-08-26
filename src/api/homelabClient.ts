@@ -5,6 +5,9 @@ import type {
   DashboardLayoutConfig,
   ServiceDataResponse,
   ArrCalendarItem,
+  SpotifyConfig,
+  SpotifyPlaylist,
+  MusicCompareResult,
 } from '../types/homelab';
 
 const BASE = '/api';
@@ -159,4 +162,56 @@ export function fetchServicesStatus(): Promise<Record<string, ServiceDataRespons
 
 export function fetchArrCalendar(): Promise<ArrCalendarItem[]> {
   return request('/arr/calendar');
+}
+
+/* ---------------- Spotify / Music Sync ---------------- */
+
+export function fetchMusicConfig(): Promise<SpotifyConfig> {
+  return request('/music/config');
+}
+
+export function saveMusicConfig(
+  config: Partial<SpotifyConfig>
+): Promise<SpotifyConfig> {
+  return request('/music/config', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
+export interface SpotifySearchResult {
+  ok: boolean;
+  playlists: SpotifyPlaylist[];
+  error?: string;
+}
+
+export function searchSpotifyPlaylists(query: string): Promise<SpotifySearchResult> {
+  return request(`/music/search?q=${encodeURIComponent(query)}`);
+}
+
+export function compareMusicPlaylist(input: string): Promise<MusicCompareResult> {
+  return request(`/music/compare?playlist=${encodeURIComponent(input)}`);
+}
+
+export interface AddArtistResult {
+  ok: boolean;
+  artistId?: string;
+  name?: string;
+  error?: string;
+}
+
+export function addLidarrArtist(
+  name: string,
+  opts?: {
+    rootFolderPath?: string;
+    qualityProfileId?: number | null;
+    metadataProfileId?: number | null;
+    monitor?: boolean;
+    searchForNewAlbum?: boolean;
+  }
+): Promise<AddArtistResult> {
+  return request('/music/artist', {
+    method: 'POST',
+    body: JSON.stringify({ name, ...opts }),
+  });
 }

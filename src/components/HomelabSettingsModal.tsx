@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Icon } from './common/Icon';
 import { EndpointManager } from './EndpointManager';
+import { fetchMusicConfig, saveMusicConfig } from '../api/homelabClient';
 import type {
   HomelabConfig,
   ServiceEndpointConfig,
   QuickLink,
   ServiceType,
   ServiceCategory,
+  SpotifyConfig,
 } from '../types/homelab';
 import type { IloEndpoint } from '../types/ilo';
 import {
@@ -56,7 +58,35 @@ export function HomelabSettingsModal({
   onUpdateConfig,
   onEndpointsChange,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<'services' | 'quicklinks' | 'appearance' | 'ilo'>('services');
+  const [tab, setTab] = useState<'services' | 'quicklinks' | 'music' | 'appearance' | 'ilo'>('services');
+
+  // Music / Spotify form state
+  const [musicConfig, setMusicConfig] = useState<SpotifyConfig | null>(null);
+  const [musicClientId, setMusicClientId] = useState('');
+  const [musicClientSecret, setMusicClientSecret] = useState('');
+  const [musicRootFolder, setMusicRootFolder] = useState('');
+  const [musicQualityProfile, setMusicQualityProfile] = useState('');
+  const [musicMetadataProfile, setMusicMetadataProfile] = useState('');
+  const [musicSaving, setMusicSaving] = useState(false);
+  const [musicMsg, setMusicMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (tab !== 'music') return;
+    let cancelled = false;
+    fetchMusicConfig()
+      .then((c) => {
+        if (cancelled) return;
+        setMusicConfig(c);
+        setMusicClientId(c.clientId || '');
+        setMusicRootFolder(c.lidarrRootFolder || '');
+        setMusicQualityProfile(c.lidarrQualityProfileId != null ? String(c.lidarrQualityProfileId) : '');
+        setMusicMetadataProfile(c.lidarrMetadataProfileId != null ? String(c.lidarrMetadataProfileId) : '');
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   // Service form state
   const [editingService, setEditingService] = useState<Partial<ServiceEndpointConfig> | null>(null);
@@ -166,6 +196,31 @@ export function HomelabSettingsModal({
     }
   };
 
+  /* ---------------- Music / Spotify Handlers ---------------- */
+
+  const handleSaveMusic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMusicSaving(true);
+    setMusicMsg(null);
+    try {
+      const updated = await saveMusicConfig({
+        clientId: musicClientId,
+        clientSecret: musicClientSecret,
+        lidarrRootFolder: musicRootFolder,
+        lidarrQualityProfileId: musicQualityProfile ? Number(musicQualityProfile) : null,
+        lidarrMetadataProfileId: musicMetadataProfile ? Number(musicMetadataProfile) : null,
+      });
+      setMusicConfig(updated);
+      setMusicClientSecret('');
+      onUpdateConfig({ ...config, spotify: updated });
+      setMusicMsg({ ok: true, text: 'Music settings saved.' });
+    } catch (err: any) {
+      setMusicMsg({ ok: false, text: err.message || 'Failed to save music settings' });
+    } finally {
+      setMusicSaving(false);
+    }
+  };
+
   return (
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -191,6 +246,12 @@ export function HomelabSettingsModal({
             onClick={() => setTab('quicklinks')}
           >
             <Icon name="globe" size={16} /> Quick Links ({config.quickLinks?.length || 0})
+          </button>
+          <button
+            className={`tab-btn ${tab === 'music' ? 'active' : ''}`}
+            onClick={() => setTab('music')}
+          >
+            <Icon name="music" size={16} /> Spotify / Music Sync
           </button>
           <button
             className={`tab-btn ${tab === 'appearance' ? 'active' : ''}`}
@@ -436,7 +497,86 @@ export function HomelabSettingsModal({
             </div>
           )}
 
-          {/* TAB 3: APPEARANCE */}
+          {/* TAB 3: MUSIC / SPOTIFY */}
+          {tab === 'music' && (
+            <div className="settings-tab-pane">
+              <div className="pane-header-row">
+                <div>
+                  <h3>Spotify Playlist Sync</h3>
+                  <p className="subtext">
+                    Connect a Spotify Developer App and set your default Lidarr preferences for adding missing artists.
+                  </p>
+                </div>
+              </div>
+              {musicMsg && (
+                <div className={`banner ${musicMsg.ok ? 'success' : 'error'}`} style={{ marginBottom: 12 }}>
+                  {musicMsg.text}
+                </div>
+              )}
+              <form className="settings-form inline" onSubmit={handleSaveMusic}>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Spotify Client ID</label>
+                    <input
+                      type="text"
+                      placeholder="Your Spotify App Client ID"
+                      value={musicClientId}
+                      onChange={(e) => setMusicClientId(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Spotify Client Secret</label>
+                    <input
+                      type="password"
+                      placeholder={musicConfig?.configured ? '•••••••• (leave blank to keep)' : 'Your Spotify App Client Secret'}
+                      value={musicClientSecret}
+                      onChange={(e) => setMusicClientSecret(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group full-span">
+                    <label>Default Lidarr Root Folder</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. /data/music"
+                      value={musicRootFolder}
+                      onChange={(e) => setMusicRootFolder(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Default Lidarr Quality Profile ID</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1 (leave blank to auto-pick first)"
+                      value={musicQualityProfile}
+                      onChange={(e) => setMusicQualityProfile(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Default Lidarr Metadata Profile ID</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1"
+                      value={musicMetadataProfile}
+                      onChange={(e) => setMusicMetadataProfile(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-actions">
+                  <button type="submit" className="btn primary" disabled={musicSaving}>
+                    {musicSaving ? 'Saving…' : 'Save Music Settings'}
+                  </button>
+                </div>
+              </form>
+              {!musicConfig?.configured && (
+                <p className="subtext" style={{ marginTop: 14 }}>
+                  To create a Spotify App: visit the Spotify Developer Dashboard, create an app, then copy its Client ID
+                  and Client Secret. Public playlist reading works without any redirect URI or scopes.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: APPEARANCE */}
           {tab === 'appearance' && (
             <div className="settings-tab-pane">
               <h3>Dashboard Layout & Refresh</h3>

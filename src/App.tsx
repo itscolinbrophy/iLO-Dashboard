@@ -10,6 +10,7 @@ import { SidebarNav } from './components/SidebarNav';
 import { ConfigurableDashboard } from './components/ConfigurableDashboard';
 import { DedicatedCategoryView } from './components/DedicatedCategoryView';
 import { HomelabSettingsModal } from './components/HomelabSettingsModal';
+import { MusicSync } from './components/MusicSync';
 import { NotificationBell } from './components/NotificationBell';
 import { Icon } from './components/common/Icon';
 import type { IloEndpoint, TelemetryMap } from './types/ilo';
@@ -165,6 +166,8 @@ function App() {
                 ? 'Network & Security'
                 : activeTab === 'media'
                 ? 'Media & Streaming'
+                : activeTab === 'music'
+                ? 'Spotify Music Sync'
                 : activeTab === 'arrs'
                 ? 'Servarr Automation'
                 : activeTab === 'calendar'
@@ -219,6 +222,8 @@ function App() {
               onUpdateLayout={handleUpdateLayout}
               onOpenSettings={() => setSettingsOpen(true)}
             />
+          ) : activeTab === 'music' ? (
+            <MusicSync config={homelabConfig.spotify} onOpenSettings={() => setSettingsOpen(true)} />
           ) : (
             <DedicatedCategoryView
               category={activeTab}

@@ -81,6 +81,55 @@ export interface HomelabConfig {
   dashboardLayout: DashboardLayoutConfig;
   theme?: 'dark' | 'midnight' | 'cyber';
   refreshInterval: number | null; // in seconds
+  spotify?: SpotifyConfig;
+}
+
+/* ------------------- Spotify / Music Sync ------------------- */
+
+export interface SpotifyConfig {
+  configured: boolean;
+  clientId: string;
+  clientSecret?: string;
+  lidarrRootFolder: string;
+  lidarrQualityProfileId: number | null;
+  lidarrMetadataProfileId: number | null;
+}
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string;
+  owner: string;
+  trackCount: number;
+  imageUrl?: string;
+  url: string;
+}
+
+export type MusicTrackStatus = 'exists' | 'missing' | 'missingAlbum';
+
+export interface CompareTrack {
+  title: string;
+  artist: string;
+  allArtists: string;
+  album: string;
+  trackId?: string;
+  isrc?: string;
+  status: MusicTrackStatus;
+}
+
+export interface MusicCompareResult {
+  ok: boolean;
+  error?: string;
+  playlist?: {
+    id: string;
+    name: string;
+    url: string;
+    imageUrl?: string;
+    owner: string;
+    trackCount: number;
+  };
+  tracks?: CompareTrack[];
+  counts?: Record<MusicTrackStatus, number>;
 }
 
 /* ------------------- Service Payload Types ------------------- */

@@ -125,6 +125,13 @@ const DEFAULT_CONFIG = {
       host: 'http://demo.npm.local:81',
     },
   ],
+  spotify: {
+    clientId: '',
+    clientSecret: '',
+    lidarrRootFolder: '',
+    lidarrQualityProfileId: null,
+    lidarrMetadataProfileId: null,
+  },
   quickLinks: [
     {
       id: 'ql-1',
@@ -251,9 +258,13 @@ export function loadHomelabConfig() {
       ...DEFAULT_CONFIG,
       ...data,
       services: data.services || DEFAULT_CONFIG.services,
-      quickLinks: data.quickLinks || DEFAULT_CONFIG.quickLinks,
-      dashboardLayout: data.dashboardLayout || DEFAULT_CONFIG.dashboardLayout,
-    };
+quickLinks: data.quickLinks || DEFAULT_CONFIG.quickLinks,
+    dashboardLayout: data.dashboardLayout || DEFAULT_CONFIG.dashboardLayout,
+    spotify: {
+      ...DEFAULT_CONFIG.spotify,
+      ...(data.spotify || {}),
+    },
+  };
   } catch (err) {
     console.error('Failed to load homelab config:', err);
     return DEFAULT_CONFIG;
@@ -278,5 +289,16 @@ export function sanitizeServiceConfig(svc) {
     hasPassword: Boolean(svc.password),
     sotf: svc.sotf,
     disabled: svc.disabled,
+  };
+}
+
+/** Sanitize the Spotify block so secrets never leave the server. */
+export function sanitizeSpotifyConfig(spotify) {
+  return {
+    configured: Boolean(spotify && spotify.clientId && spotify.clientSecret),
+    clientId: (spotify && spotify.clientId) || '',
+    lidarrRootFolder: (spotify && spotify.lidarrRootFolder) || '',
+    lidarrQualityProfileId: spotify && spotify.lidarrQualityProfileId != null ? spotify.lidarrQualityProfileId : null,
+    lidarrMetadataProfileId: spotify && spotify.lidarrMetadataProfileId != null ? spotify.lidarrMetadataProfileId : null,
   };
 }
