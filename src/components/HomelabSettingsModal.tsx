@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Icon } from './common/Icon';
+import { EndpointManager } from './EndpointManager';
 import type {
   HomelabConfig,
-  ServiceEndpointConfig,
+  ServiceEndpoint,
   QuickLink,
   ServiceType,
   ServiceCategory,
 } from '../types/homelab';
+import type { IloEndpoint } from '../types/ilo';
 import {
   addService,
   updateService,
@@ -19,9 +21,11 @@ import {
 
 interface SettingsModalProps {
   config: HomelabConfig;
+  endpoints: IloEndpoint[];
   onClose: () => void;
   onRefreshAll: () => void;
   onUpdateConfig: (newCfg: HomelabConfig) => void;
+  onEndpointsChange: () => void;
 }
 
 const SERVICE_TYPES: { type: ServiceType; label: string; category: ServiceCategory; icon: string }[] = [
@@ -46,11 +50,13 @@ const SERVICE_TYPES: { type: ServiceType; label: string; category: ServiceCatego
 
 export function HomelabSettingsModal({
   config,
+  endpoints,
   onClose,
   onRefreshAll,
   onUpdateConfig,
+  onEndpointsChange,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<'services' | 'quicklinks' | 'appearance'>('services');
+  const [tab, setTab] = useState<'services' | 'quicklinks' | 'appearance' | 'ilo'>('services');
 
   // Service form state
   const [editingService, setEditingService] = useState<Partial<ServiceEndpointConfig> | null>(null);
@@ -191,6 +197,12 @@ export function HomelabSettingsModal({
             onClick={() => setTab('appearance')}
           >
             <Icon name="grid" size={16} /> Dashboard Layout & Theme
+          </button>
+          <button
+            className={`tab-btn ${tab === 'ilo' ? 'active' : ''}`}
+            onClick={() => setTab('ilo')}
+          >
+            <Icon name="server" size={16} /> iLO Endpoints ({endpoints.length})
           </button>
         </div>
 
@@ -462,6 +474,13 @@ export function HomelabSettingsModal({
                   </select>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 4: iLO ENDPOINTS */}
+          {tab === 'ilo' && (
+            <div className="settings-tab-pane">
+              <EndpointManager endpoints={endpoints} onChange={onEndpointsChange} />
             </div>
           )}
         </div>

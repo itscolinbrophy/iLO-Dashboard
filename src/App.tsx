@@ -210,7 +210,6 @@ function App() {
               loading={loading}
               onRefresh={refreshAll}
               onOpenSettings={() => setSettingsOpen(true)}
-              onEndpointsChange={loadInitialData}
             />
           )}
         </main>
@@ -220,9 +219,11 @@ function App() {
       {settingsOpen && (
         <HomelabSettingsModal
           config={homelabConfig}
+          endpoints={endpoints}
           onClose={() => setSettingsOpen(false)}
           onRefreshAll={refreshAll}
           onUpdateConfig={(newCfg) => setHomelabConfig(newCfg)}
+          onEndpointsChange={loadInitialData}
         />
       )}
     </div>

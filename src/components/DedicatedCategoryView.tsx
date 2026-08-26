@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { QuickLinksWidget } from './widgets/QuickLinksWidget';
 import { PeanutWidget } from './widgets/PeanutWidget';
 import { PveWidget, PbsWidget } from './widgets/PveWidget';
@@ -7,7 +6,6 @@ import { PlexWidget, SeerWidget, AudiobookshelfWidget } from './widgets/MediaWid
 import { ArrWidget, SabnzbdWidget, CalendarWidget } from './widgets/ArrWidgets';
 import { PortainerWidget } from './widgets/PortainerWidget';
 import { TelemetryDashboard } from './TelemetryDashboard';
-import { EndpointManager } from './EndpointManager';
 import type { HomelabConfig, ServiceDataResponse, ArrCalendarItem } from '../types/homelab';
 import type { IloEndpoint, TelemetryMap } from '../types/ilo';
 
@@ -21,7 +19,6 @@ interface DedicatedCategoryViewProps {
   loading: boolean;
   onRefresh: () => void;
   onOpenSettings: () => void;
-  onEndpointsChange: () => void;
 }
 
 export function DedicatedCategoryView({
@@ -34,10 +31,7 @@ export function DedicatedCategoryView({
   loading,
   onRefresh,
   onOpenSettings,
-  onEndpointsChange,
 }: DedicatedCategoryViewProps) {
-  const [iloSubTab, setIloSubTab] = useState<'telemetry' | 'endpoints'>('telemetry');
-
   switch (category) {
     case 'quicklinks':
       return (
@@ -58,47 +52,32 @@ export function DedicatedCategoryView({
       return (
         <div className="category-view-container">
           <div className="view-header">
-            <div className="header-tabs">
-              <button
-                className={`tab-btn ${iloSubTab === 'telemetry' ? 'active' : ''}`}
-                onClick={() => setIloSubTab('telemetry')}
-              >
-                Telemetry & Fan Control
-              </button>
-              <button
-                className={`tab-btn ${iloSubTab === 'endpoints' ? 'active' : ''}`}
-                onClick={() => setIloSubTab('endpoints')}
-              >
-                Manage iLO Endpoints ({iloEndpoints.length})
-              </button>
+            <h2>iLO & Hardware Telemetry</h2>
+            <p className="subtext">
+              Live telemetry and fan control. Manage iLO endpoints from the settings menu.
+            </p>
+          </div>
+          <div className="grid-2col">
+            <div className="full-width">
+              <TelemetryDashboard
+                endpoints={iloEndpoints}
+                telemetry={iloTelemetry}
+                loading={loading}
+                lastUpdated={new Date()}
+                onRefresh={onRefresh}
+                tempColumns={2}
+                tempRows={2}
+                refreshInterval={config.refreshInterval}
+              />
+            </div>
+            <div className="full-width" style={{ marginTop: 16 }}>
+              {Object.values(servicesStatus)
+                .filter((s) => s.type === 'peanut')
+                .map((p) => (
+                  <PeanutWidget key={p.serviceId} response={p} loading={loading} />
+                ))}
             </div>
           </div>
-
-          {iloSubTab === 'telemetry' ? (
-            <div className="grid-2col">
-              <div className="full-width">
-                <TelemetryDashboard
-                  endpoints={iloEndpoints}
-                  telemetry={iloTelemetry}
-                  loading={loading}
-                  lastUpdated={new Date()}
-                  onRefresh={onRefresh}
-                  tempColumns={2}
-                  tempRows={2}
-                  refreshInterval={config.refreshInterval}
-                />
-              </div>
-              <div className="full-width" style={{ marginTop: 16 }}>
-                {Object.values(servicesStatus)
-                  .filter((s) => s.type === 'peanut')
-                  .map((p) => (
-                    <PeanutWidget key={p.serviceId} response={p} loading={loading} />
-                  ))}
-              </div>
-            </div>
-          ) : (
-            <EndpointManager endpoints={iloEndpoints} onChange={onEndpointsChange} />
-          )}
         </div>
       );
 
