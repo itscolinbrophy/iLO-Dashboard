@@ -265,7 +265,7 @@ export function ConfigurableDashboard({
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          gap: '22px',
+          gap: '16px',
         }}
       >
         {widgets.map((widget, idx) => {
