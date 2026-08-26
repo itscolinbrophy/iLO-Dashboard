@@ -72,6 +72,9 @@ do_update() {
   [[ -d "$APP_DIR/.git" ]] || die "No existing install found at $APP_DIR. Run without --update first."
 
   cd "$APP_DIR"
+  log "Discarding local changes to tracked files..."
+  git reset --hard HEAD
+  git clean -fd
   log "Pulling latest changes from GitHub..."
   git pull --ff-only origin master || die "git pull failed. Check for local changes."
 
@@ -182,8 +185,11 @@ SERVICE_NAME="$SERVICE_NAME"
 
 [[ -d "\$APP_DIR/.git" ]] || { echo "No install found at \$APP_DIR"; exit 1; }
 
-echo "[update] Pulling latest changes..."
+echo "[update] Discarding local changes to tracked files..."
 cd "\$APP_DIR"
+git reset --hard HEAD
+git clean -fd
+echo "[update] Pulling latest changes..."
 git pull --ff-only origin master || { echo "[update] git pull failed"; exit 1; }
 
 echo "[update] Installing dependencies..."
