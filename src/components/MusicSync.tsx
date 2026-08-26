@@ -206,6 +206,10 @@ export function MusicSync({ config, onOpenSettings }: MusicSyncProps) {
                   <span className="widget-sub">Paste a Spotify playlist link / ID, or search public playlists</span>
                 </div>
               </div>
+              <div className="music-note">
+                <Icon name="info" size={13} />
+                <span>Only public playlists can be read with an app token. Private playlists will return a 403 error — make the playlist public to sync it.</span>
+              </div>
             </div>
             <div className="music-search-area">
               <div className="music-input-row">

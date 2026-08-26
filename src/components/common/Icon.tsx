@@ -310,6 +310,14 @@ export function Icon({ name, size = 18, className = '' }: IconProps) {
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
       );
+    case 'info':
+      return (
+        <svg {...strokeProps}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+      );
     default:
       return (
         <svg {...strokeProps}>

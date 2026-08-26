@@ -43,14 +43,45 @@ export async function getSpotifyToken(spotify) {
   return cachedToken.token;
 }
 
-async function spotifyGet(spotify, path) {
+async function spotifyGet(spotify, path, label = '') {
   const token = await getSpotifyToken(spotify);
-  const res = await httpRequestJson(`${API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 10000,
-    rejectUnauthorized: true,
-  });
-  return res;
+  try {
+    return await httpRequestJson(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000,
+      rejectUnauthorized: true,
+    });
+  } catch (err) {
+    throw enrichSpotifyError(err, label || path);
+  }
+}
+
+/** Rewrite a raw Spotify HTTP error into a clear, friendly message. */
+function enrichSpotifyError(err, label) {
+  const msg = err.message || String(err);
+  const m = msg.match(/HTTP (\d{3}):\s*(.*)$/s);
+  if (!m) return err;
+  const status = Number(m[1]);
+  let detail = m[2];
+  try {
+    const j = JSON.parse(detail);
+    detail = j?.error?.message || j?.message || detail;
+  } catch {
+    /* keep raw text */
+  }
+
+  let hint = null;
+  if (status === 401) hint = 'Spotify rejected the API token — double-check your Client ID / Client Secret in Settings.';
+  if (status === 403)
+    hint =
+      'Spotify returned 403 Forbidden. This playlist is likely private — only PUBLIC playlists can be read with an app token. Make the playlist public, or add OAuth for private playlists.';
+  if (status === 404) hint = 'That Spotify playlist was not found. Check the URL / playlist ID.';
+  if (status === 429) hint = 'Spotify is rate-limiting requests. Wait a moment and try again.';
+
+  const error = new Error(hint ? `${hint} (${detail})` : `Spotify request failed (${status}): ${detail}`);
+  error.status = status;
+  error.label = label;
+  return error;
 }
 
 function playlistIdFromInput(input) {
@@ -89,11 +120,11 @@ export async function fetchSpotifyPlaylist(spotify, input) {
   const id = playlistIdFromInput(input);
   if (!id) throw new Error('Invalid Spotify playlist URL or ID');
 
-  const info = await spotifyGet(spotify, `/playlists/${id}?fields=id,name,description,owner,images,tracks.total,external_urls`);
+  const info = await spotifyGet(spotify, `/playlists/${id}?fields=id,name,description,owner,images,tracks.total,external_urls`, 'loading playlist info');
   const tracks = [];
   let url = `/playlists/${id}/tracks?limit=50`;
   while (url) {
-    const page = await spotifyGet(spotify, url);
+    const page = await spotifyGet(spotify, url, 'loading playlist tracks');
     for (const item of page.items || []) {
       const t = item.track;
       if (!t) continue; // skip local / unavailable tracks
