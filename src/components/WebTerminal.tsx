@@ -11,6 +11,10 @@ export interface ShellTarget {
   title: string;
 }
 
+const MIN_SIZE = 420;
+const MAX_W = window.innerWidth - 48;
+const MAX_H = window.innerHeight - 48;
+
 /**
  * In-browser terminal backed by the server's /ws/shell WebSocket bridge.
  * The server SSHes to the PVE host (pct enter <vmid> for containers) and
@@ -23,6 +27,8 @@ export function WebTerminal({ target, onClose }: { target: ShellTarget; onClose:
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const [size, setSize] = useState({ width: 900, height: 600 });
+  const resizingRef = useRef(false);
 
   useEffect(() => {
     const term = new Terminal({
@@ -113,9 +119,39 @@ export function WebTerminal({ target, onClose }: { target: ShellTarget; onClose:
     ws.send(JSON.stringify({ username, password }));
   };
 
+  /** Start a drag-resize operation from the bottom-right corner. */
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = size.width;
+    const startH = size.height;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const w = Math.min(MAX_W, Math.max(MIN_SIZE, startW + (ev.clientX - startX)));
+      const h = Math.min(MAX_H, Math.max(MIN_SIZE, startH + (ev.clientY - startY)));
+      setSize({ width: w, height: h });
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      requestAnimationFrame(() => { try { fitRef.current?.fit(); } catch { /* noop */ } });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box terminal-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-box terminal-modal"
+        style={{ width: size.width, height: size.height }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3>
             <span className={`terminal-status-dot ${status}`} />
@@ -150,6 +186,7 @@ export function WebTerminal({ target, onClose }: { target: ShellTarget; onClose:
           {status === 'closed' && 'Session ended.'}
           {status === 'needauth' && 'Waiting for credentials…'}
         </div>
+        <div className="terminal-resize-handle" onMouseDown={startResize} title="Drag to resize" />
       </div>
     </div>
   );

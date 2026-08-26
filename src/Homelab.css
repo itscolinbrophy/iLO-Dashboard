@@ -1996,8 +1996,12 @@
 /* Web terminal                                                        */
 /* ------------------------------------------------------------------ */
 .terminal-modal {
+  position: relative;
   width: min(900px, calc(100vw - 32px));
   height: min(600px, calc(100vh - 64px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
 }
 
 .terminal-container {
@@ -2005,6 +2009,24 @@
   padding: 8px 12px;
   background: #0d1117;
   overflow: hidden;
+}
+
+.terminal-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 5;
+  background:
+    linear-gradient(135deg, transparent 0 50%, var(--text-faint) 50% 55%, transparent 55% 100%);
+  background-size: 100% 100%;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.terminal-resize-handle:hover {
+  opacity: 1;
 }
 
 .terminal-auth-form {
