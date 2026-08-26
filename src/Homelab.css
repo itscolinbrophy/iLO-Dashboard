@@ -996,9 +996,24 @@
   color: var(--accent);
   border-color: var(--accent);
 }
-.vm-power-btn.danger:hover:not(:disabled) {
+.vm-power-btn.success {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.vm-power-btn.success:hover:not(:disabled) {
+  background: var(--ok);
+  color: #04121f;
+  border-color: var(--ok);
+}
+.vm-power-btn.danger {
   background: var(--crit-soft);
   color: var(--crit);
+  border-color: var(--crit);
+}
+.vm-power-btn.danger:hover:not(:disabled) {
+  background: var(--crit);
+  color: #04121f;
   border-color: var(--crit);
 }
 .vm-power-btn:disabled {

@@ -185,7 +185,7 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
                       <Icon name="terminal" size={13} />
                     </button>
                     <button
-                      className="vm-power-btn"
+                      className="vm-power-btn success"
                       title={`Start ${vm.name}`}
                       disabled={busyVmid === vm.vmid || vm.status === 'running'}
                       onClick={() => handlePowerAction(vm, 'start')}
