@@ -156,15 +156,18 @@ export function PveWidget({ title = 'Proxmox VE Cluster', response, loading, ser
                   <div className="vm-main">
                     <div className="vm-name-row">
                       <span className="vm-name">{vm.name}</span>
-                      <span className={`vm-type-badge ${vm.type === 'qemu' ? 'vm-badge' : 'lxc-badge'}`}>
-                        {vm.type === 'qemu' ? 'VM' : 'LXC'}
-                      </span>
                     </div>
                     <span className="vm-meta font-mono text-muted">
                       [{vm.vmid}] {vm.node} • {vm.cpu}% CPU
                     </span>
                   </div>
                   <div className="vm-actions">
+                    <span className="vm-type-sep">
+                      <span className={`vm-type-badge ${vm.type === 'qemu' ? 'vm-badge' : 'lxc-badge'}`}>
+                        {vm.type === 'qemu' ? 'VM' : 'LXC'}
+                      </span>
+                      <span className="vm-type-pipe">|</span>
+                    </span>
                     {actionMsg[vm.vmid] && (
                       <span className="vm-action-msg text-muted">{actionMsg[vm.vmid]}</span>
                     )}
