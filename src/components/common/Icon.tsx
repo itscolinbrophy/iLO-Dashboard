@@ -287,6 +287,22 @@ export function Icon({ name, size = 18, className = '' }: IconProps) {
           <line x1="6" y1="16" x2="14" y2="16" />
         </svg>
       );
+    case 'menu':
+      return (
+        <svg {...strokeProps}>
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      );
+    case 'x':
+    case 'close':
+      return (
+        <svg {...strokeProps}>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      );
     default:
       return (
         <svg {...strokeProps}>

@@ -37,6 +37,7 @@ function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Homelab Unified State
@@ -119,19 +120,38 @@ function App() {
   const onlineCount = Object.values(servicesStatus).filter((s) => s.ok).length;
 
   return (
-    <div className={`homelab-app-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
+    <div
+      className={`homelab-app-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${
+        mobileMenuOpen ? 'mobile-menu-open' : ''
+      }`}
+    >
       {/* SIDEBAR NAVIGATION */}
       <SidebarNav
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setMobileMenuOpen(false);
+        }}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
+
+      {/* MOBILE MENU BACKDROP */}
+      {mobileMenuOpen && (
+        <div className="mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} />
+      )}
 
       {/* MAIN VIEW AREA */}
       <div className="homelab-main-container">
         <header className="homelab-top-header">
           <div className="header-left">
+            <button
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              title="Toggle Menu"
+            >
+              <Icon name="menu" size={20} />
+            </button>
             <h1 className="header-page-title">
               {activeTab === 'dashboard'
                 ? 'Homelab Command Center'

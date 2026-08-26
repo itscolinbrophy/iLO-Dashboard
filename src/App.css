@@ -1046,4 +1046,32 @@
   .app {
     padding: 20px 16px 40px;
   }
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+  .temp-groups {
+    grid-template-columns: 1fr !important;
+  }
+  .system-card {
+    padding: 16px 14px;
+  }
+  .card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header-actions {
+    flex-wrap: wrap;
+  }
+  .panel {
+    padding: 18px 16px;
+  }
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .telemetry-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
