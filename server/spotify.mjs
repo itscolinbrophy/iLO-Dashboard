@@ -120,9 +120,14 @@ export async function fetchSpotifyPlaylist(spotify, input) {
   const id = playlistIdFromInput(input);
   if (!id) throw new Error('Invalid Spotify playlist URL or ID');
 
-  const info = await spotifyGet(spotify, `/playlists/${id}?fields=id,name,description,owner,images,tracks.total,external_urls`, 'loading playlist info');
+  // The Web API treats content as unavailable without a market or user country.
+  // Client Credentials tokens have no user, so an explicit market is required
+  // (otherwise requests return HTTP 403).
+  const market = ((spotify && spotify.market) || 'US').toUpperCase();
+
+  const info = await spotifyGet(spotify, `/playlists/${id}?market=${market}&fields=id,name,description,owner,images,tracks.total,external_urls`, 'loading playlist info');
   const tracks = [];
-  let url = `/playlists/${id}/tracks?limit=50`;
+  let url = `/playlists/${id}/tracks?limit=50&market=${market}`;
   while (url) {
     const page = await spotifyGet(spotify, url, 'loading playlist tracks');
     for (const item of page.items || []) {

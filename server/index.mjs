@@ -1167,6 +1167,7 @@ const server = http.createServer(async (req, res) => {
         lidarrRootFolder: body.lidarrRootFolder !== undefined ? String(body.lidarrRootFolder).trim() : current.lidarrRootFolder,
         lidarrQualityProfileId: body.lidarrQualityProfileId !== undefined ? body.lidarrQualityProfileId : current.lidarrQualityProfileId,
         lidarrMetadataProfileId: body.lidarrMetadataProfileId !== undefined ? body.lidarrMetadataProfileId : current.lidarrMetadataProfileId,
+        market: body.market !== undefined && body.market !== '' ? String(body.market).trim().toUpperCase() : (current.market || 'US'),
       };
       saveHomelabConfig(cfg);
       return sendJson(res, 200, sanitizeSpotifyConfig(cfg.spotify));

@@ -69,6 +69,7 @@ export function HomelabSettingsModal({
   const [musicMetadataProfile, setMusicMetadataProfile] = useState('');
   const [musicSaving, setMusicSaving] = useState(false);
   const [musicMsg, setMusicMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [musicMarket, setMusicMarket] = useState('US');
 
   useEffect(() => {
     if (tab !== 'music') return;
@@ -81,6 +82,7 @@ export function HomelabSettingsModal({
         setMusicRootFolder(c.lidarrRootFolder || '');
         setMusicQualityProfile(c.lidarrQualityProfileId != null ? String(c.lidarrQualityProfileId) : '');
         setMusicMetadataProfile(c.lidarrMetadataProfileId != null ? String(c.lidarrMetadataProfileId) : '');
+        setMusicMarket(c.market || 'US');
       })
       .catch(() => {});
     return () => {
@@ -209,6 +211,7 @@ export function HomelabSettingsModal({
         lidarrRootFolder: musicRootFolder,
         lidarrQualityProfileId: musicQualityProfile ? Number(musicQualityProfile) : null,
         lidarrMetadataProfileId: musicMetadataProfile ? Number(musicMetadataProfile) : null,
+        market: musicMarket,
       });
       setMusicConfig(updated);
       setMusicClientSecret('');
@@ -558,6 +561,16 @@ export function HomelabSettingsModal({
                       placeholder="e.g. 1"
                       value={musicMetadataProfile}
                       onChange={(e) => setMusicMetadataProfile(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Spotify Market (country code)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. US, GB, AU"
+                      maxLength={2}
+                      value={musicMarket}
+                      onChange={(e) => setMusicMarket(e.target.value.toUpperCase())}
                     />
                   </div>
                 </div>

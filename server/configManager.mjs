@@ -131,6 +131,7 @@ const DEFAULT_CONFIG = {
     lidarrRootFolder: '',
     lidarrQualityProfileId: null,
     lidarrMetadataProfileId: null,
+    market: 'US',
   },
   quickLinks: [
     {
@@ -300,5 +301,6 @@ export function sanitizeSpotifyConfig(spotify) {
     lidarrRootFolder: (spotify && spotify.lidarrRootFolder) || '',
     lidarrQualityProfileId: spotify && spotify.lidarrQualityProfileId != null ? spotify.lidarrQualityProfileId : null,
     lidarrMetadataProfileId: spotify && spotify.lidarrMetadataProfileId != null ? spotify.lidarrMetadataProfileId : null,
+    market: (spotify && spotify.market) || 'US',
   };
 }

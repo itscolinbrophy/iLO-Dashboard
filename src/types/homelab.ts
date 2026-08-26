@@ -93,6 +93,7 @@ export interface SpotifyConfig {
   lidarrRootFolder: string;
   lidarrQualityProfileId: number | null;
   lidarrMetadataProfileId: number | null;
+  market?: string;
 }
 
 export interface SpotifyPlaylist {
