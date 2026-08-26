@@ -3,7 +3,7 @@ import { Icon } from './common/Icon';
 import { EndpointManager } from './EndpointManager';
 import type {
   HomelabConfig,
-  ServiceEndpoint,
+  ServiceEndpointConfig,
   QuickLink,
   ServiceType,
   ServiceCategory,
