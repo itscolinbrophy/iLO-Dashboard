@@ -20,6 +20,7 @@ export type ServiceType =
   | 'pbs'
   | 'unifi'
   | 'portainer'
+  | 'nas'
   | 'quicklinks'
   | 'calendar'
   | 'custom_iframe';
@@ -415,6 +416,37 @@ export interface NginxStatus {
     enabled: boolean;
     ssl: boolean;
   }>;
+}
+
+export interface NasStatus {
+  model: string;
+  hostname: string;
+  version: string;
+  uptime: string;
+  cpuUsagePercent: number;
+  memUsagePercent: number;
+  memUsedBytes: number;
+  memTotalBytes: number;
+  tempCelsius: number | null;
+  status: string; // healthy, degraded, offline
+  volumes: Array<{
+    name: string;
+    status: string;
+    usedBytes: number;
+    totalBytes: number;
+    usagePercent: number;
+  }>;
+  disks: Array<{
+    name: string;
+    model: string;
+    sizeBytes: number;
+    tempCelsius: number | null;
+    status: string; // normal, warning, critical
+  }>;
+  network?: {
+    lanMbps: number;
+    wanMbps: number;
+  };
 }
 
 export interface ServiceDataResponse<T = any> {

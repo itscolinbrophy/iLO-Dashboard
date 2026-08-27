@@ -5,6 +5,7 @@ import { OpnsenseWidget, UnifiWidget, NginxWidget } from './widgets/NetworkWidge
 import { PlexWidget, SeerWidget, AudiobookshelfWidget } from './widgets/MediaWidgets';
 import { ArrWidget, SabnzbdWidget, CalendarWidget } from './widgets/ArrWidgets';
 import { PortainerWidget } from './widgets/PortainerWidget';
+import { NasWidget } from './widgets/NasWidget';
 import { TelemetryDashboard } from './TelemetryDashboard';
 import type { HomelabConfig, ServiceDataResponse, ArrCalendarItem } from '../types/homelab';
 import type { IloEndpoint, TelemetryMap } from '../types/ilo';
@@ -85,12 +86,13 @@ export function DedicatedCategoryView({
       const pve = Object.values(servicesStatus).find((s) => s.type === 'pve');
       const pbs = Object.values(servicesStatus).find((s) => s.type === 'pbs');
       const portainer = Object.values(servicesStatus).find((s) => s.type === 'portainer');
+      const nas = Object.values(servicesStatus).find((s) => s.type === 'nas');
 
       return (
         <div className="category-view-container">
           <div className="view-header">
             <h2>Virtualization & Containers</h2>
-            <p className="subtext">Proxmox VE hypervisors, PBS backup datastores and Portainer Docker fleets.</p>
+            <p className="subtext">Proxmox VE hypervisors, PBS backup datastores, Portainer Docker fleets and NAS storage.</p>
           </div>
           <div className="category-grid-layout">
             <div className="grid-col-2">
@@ -107,6 +109,9 @@ export function DedicatedCategoryView({
             </div>
             <div className="grid-col-3">
               <PortainerWidget title="Portainer Docker Engine" response={portainer} loading={loading} />
+            </div>
+            <div className="grid-col-3">
+              <NasWidget title="Synology NAS Storage" response={nas} loading={loading} />
             </div>
           </div>
         </div>

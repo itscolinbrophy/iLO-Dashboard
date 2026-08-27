@@ -49,6 +49,7 @@ import {
   pollUnifi,
   pollOpnsense,
   pollNginx,
+  pollNas,
   pvePowerAction,
   pveCreateGuest,
   pveListStorageContent,
@@ -869,6 +870,9 @@ async function pollSingleService(service) {
         break;
       case 'nginx':
         data = await pollNginx(service);
+        break;
+      case 'nas':
+        data = await pollNas(service);
         break;
       default:
         throw new Error(`Unsupported service type: ${service.type}`);

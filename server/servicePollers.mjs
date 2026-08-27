@@ -1471,3 +1471,119 @@ export async function pollNginx(service) {
     throw err;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Synology NAS (DSM) — supports MFA/OTP via the DSM login API         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Poll a Synology NAS (e.g. RS819) for system health, storage volumes,
+ * disk status, and CPU/memory usage.
+ *
+ * DSM requires a session login. If 2FA/MFA is enabled, the login returns
+ * `error: 403` and the client must retry with an OTP code. We support this
+ * by storing the OTP in `service.apiKey` (the "API Key / Token" field) and
+ * passing it as `otp_code` on the second login attempt.
+ */
+export async function pollNas(service) {
+  const base = service.host.replace(/\/+$/, '');
+  const username = (service.username || 'admin').trim();
+  const password = service.password || '';
+  const otp = service.apiKey || ''; // OTP/2FA code stored in the API key field
+
+  async function login() {
+    const loginUrl = `${base}/webapi/auth.cgi?api=SYNO.API.Auth&version=6&method=login&account=${encodeURIComponent(username)}&passwd=${encodeURIComponent(password)}&session=FileStation&format=sid`;
+    const res = await httpRequestJson(loginUrl, { timeout: 8000 });
+    if (res?.success) return res.data?.sid;
+    // If MFA is required, retry with the OTP code.
+    if (res?.error?.code === 403 && otp) {
+      const otpUrl = `${base}/webapi/auth.cgi?api=SYNO.API.Auth&version=6&method=login&account=${encodeURIComponent(username)}&passwd=${encodeURIComponent(password)}&otp_code=${encodeURIComponent(otp)}&session=FileStation&format=sid`;
+      const otpRes = await httpRequestJson(otpUrl, { timeout: 8000 });
+      if (otpRes?.success) return otpRes.data?.sid;
+    }
+    throw new Error(res?.error?.code ? `DSM login failed (code ${res.error.code})` : 'DSM login failed');
+  }
+
+  async function apiCall(api, method, version, params = {}) {
+    const sid = await login();
+    const query = new URLSearchParams({
+      api,
+      version: String(version),
+      method,
+      _sid: sid,
+      ...params,
+    });
+    const res = await httpRequestJson(`${base}/webapi/entry.cgi?${query.toString()}`, { timeout: 8000 });
+    if (!res?.success) throw new Error(`DSM ${method} failed`);
+    return res.data;
+  }
+
+  try {
+    const sysInfo = await apiCall('SYNO.Core.System', 'info', 1).catch(() => null);
+    const storage = await apiCall('SYNO.Storage.CGI.Storage', 'load_info', 1).catch(() => null);
+    const diskData = await apiCall('SYNO.Storage.CGI.Disk', 'load_info', 1).catch(() => null);
+    const resource = await apiCall('SYNO.Core.System.Utilization', 'get', 1).catch(() => null);
+
+    const volumes = (storage?.volumes || []).map((v) => {
+      const totalBytes = Number(v.size?.total || 0);
+      const usedBytes = Number(v.size?.used || 0);
+      return {
+        name: v.name || 'volume1',
+        status: v.status || 'normal',
+        usedBytes,
+        totalBytes,
+        usagePercent: totalBytes ? Math.round((usedBytes / totalBytes) * 100) : 0,
+      };
+    });
+
+    const disks = (diskData?.disks || []).map((d) => ({
+      name: d.disk || d.device || 'disk',
+      model: d.model || 'Unknown',
+      sizeBytes: Number(d.size?.total || 0),
+      tempCelsius: d.temperature != null ? Number(d.temperature) : null,
+      status: d.status || 'normal',
+    }));
+
+    const cpu = Number(resource?.cpu?.user ?? 0) + Number(resource?.cpu?.system ?? 0);
+    const memTotal = Number(resource?.memory?.total || 0);
+    const memUsed = Number(resource?.memory?.real_used || 0);
+
+    return {
+      model: sysInfo?.model || 'Synology RS819',
+      hostname: sysInfo?.hostname || service.name || 'NAS',
+      version: sysInfo?.firmware_ver || 'DSM',
+      uptime: sysInfo?.uptime ? `${Math.floor(Number(sysInfo.uptime) / 86400)}d` : '—',
+      cpuUsagePercent: Math.min(100, Math.round(cpu)),
+      memUsagePercent: memTotal ? Math.round((memUsed / memTotal) * 100) : 0,
+      memUsedBytes: memUsed,
+      memTotalBytes: memTotal,
+      tempCelsius: disks.length ? Math.max(...disks.map((d) => d.tempCelsius ?? 0)) : null,
+      status: disks.some((d) => d.status === 'critical') ? 'critical' : 'healthy',
+      volumes,
+      disks,
+    };
+  } catch (err) {
+    if (service.host.includes('demo') || service.host.includes('sample')) {
+      return {
+        model: 'Synology RS819',
+        hostname: 'rs819',
+        version: 'DSM 7.2.1',
+        uptime: '42d',
+        cpuUsagePercent: 12,
+        memUsagePercent: 38,
+        memUsedBytes: 1_200_000_000,
+        memTotalBytes: 3_200_000_000,
+        tempCelsius: 41,
+        status: 'healthy',
+        volumes: [
+          { name: 'volume1', status: 'normal', usedBytes: 2_400_000_000_000, totalBytes: 4_000_000_000_000, usagePercent: 60 },
+        ],
+        disks: [
+          { name: 'Disk 1', model: 'WD Red 4TB', sizeBytes: 4_000_000_000_000, tempCelsius: 40, status: 'normal' },
+          { name: 'Disk 2', model: 'WD Red 4TB', sizeBytes: 4_000_000_000_000, tempCelsius: 41, status: 'normal' },
+        ],
+      };
+    }
+    throw err;
+  }
+}

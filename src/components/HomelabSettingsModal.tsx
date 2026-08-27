@@ -37,6 +37,7 @@ const SERVICE_TYPES: { type: ServiceType; label: string; category: ServiceCatego
   { type: 'pve', label: 'Proxmox VE (PVE)', category: 'infrastructure', icon: 'pve' },
   { type: 'pbs', label: 'Proxmox Backup Server (PBS)', category: 'infrastructure', icon: 'database' },
   { type: 'portainer', label: 'Portainer (Docker)', category: 'infrastructure', icon: 'box' },
+  { type: 'nas', label: 'Synology NAS (DSM)', category: 'infrastructure', icon: 'database' },
   { type: 'unifi', label: 'UniFi Network Gateway', category: 'network', icon: 'wifi' },
   { type: 'opnsense', label: 'OPNsense Firewall', category: 'network', icon: 'shield' },
   { type: 'nginx', label: 'Nginx Proxy Manager', category: 'network', icon: 'globe' },
@@ -849,6 +850,41 @@ function ServiceEditForm({
                 value={editingService.password || ''}
                 onChange={(e) => setEditingService({ ...editingService, password: e.target.value })}
               />
+            </div>
+          </>
+        )}
+
+        {['nas'].includes(editingService.type || '') && (
+          <>
+            <div className="form-group">
+              <label>DSM Username</label>
+              <input
+                type="text"
+                placeholder="e.g. admin"
+                value={editingService.username || ''}
+                onChange={(e) => setEditingService({ ...editingService, username: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>DSM Password</label>
+              <input
+                type="password"
+                placeholder="Password"
+                value={editingService.password || ''}
+                onChange={(e) => setEditingService({ ...editingService, password: e.target.value })}
+              />
+            </div>
+            <div className="form-group full-span">
+              <label>2FA / OTP Code (if MFA is enabled)</label>
+              <input
+                type="text"
+                placeholder="6-digit code from your authenticator app"
+                value={editingService.apiKey || ''}
+                onChange={(e) => setEditingService({ ...editingService, apiKey: e.target.value })}
+              />
+              <span className="form-hint">
+                If your NAS has two-factor authentication enabled, enter the current 6-digit OTP code.
+              </span>
             </div>
           </>
         )}

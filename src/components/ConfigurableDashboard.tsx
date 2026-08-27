@@ -7,6 +7,7 @@ import { OpnsenseWidget, UnifiWidget, NginxWidget } from './widgets/NetworkWidge
 import { PlexWidget, SeerWidget, AudiobookshelfWidget } from './widgets/MediaWidgets';
 import { ArrWidget, SabnzbdWidget, CalendarWidget } from './widgets/ArrWidgets';
 import { PortainerWidget } from './widgets/PortainerWidget';
+import { NasWidget } from './widgets/NasWidget';
 import { TelemetryDashboard } from './TelemetryDashboard';
 import type {
   HomelabConfig,
@@ -39,6 +40,7 @@ const AVAILABLE_WIDGETS: { type: ServiceType; title: string; defaultColSpan: num
   { type: 'unifi', title: 'UniFi Network Gateway', defaultColSpan: 1 },
   { type: 'opnsense', title: 'OPNsense Firewall', defaultColSpan: 2 },
   { type: 'portainer', title: 'Portainer Docker Host', defaultColSpan: 1 },
+  { type: 'nas', title: 'Synology NAS Storage', defaultColSpan: 2 },
   { type: 'plex', title: 'Plex & Tautulli Stream Monitor', defaultColSpan: 2 },
   { type: 'seer', title: 'Overseerr Requests', defaultColSpan: 1 },
   { type: 'audiobookshelf', title: 'Audiobookshelf Library', defaultColSpan: 1 },
@@ -72,8 +74,11 @@ export function ConfigurableDashboard({
 
   // Resize state
   const [resizingId, setResizingId] = useState<string | null>(null);
-  const [resizePreview, setResizePreview] = useState<number | null>(null);
+  const [previewRect, setPreviewRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const resizeStartRef = useRef<{ x: number; startSpan: number } | null>(null);
+  const resizeCurrentRef = useRef<number | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const widgetElsRef = useRef<Record<string, HTMLElement | null>>({});
 
   const widgets = config.dashboardLayout.widgets || [];
   const columns = config.dashboardLayout.columns || 3;
@@ -168,28 +173,45 @@ export function ConfigurableDashboard({
     e.preventDefault();
     e.stopPropagation();
     resizeStartRef.current = { x: e.clientX, startSpan };
+    resizeCurrentRef.current = startSpan;
     setResizingId(widgetId);
-    setResizePreview(startSpan);
+
+    const computePreview = (nextSpan: number) => {
+      const gridEl = gridRef.current;
+      const widgetEl = widgetElsRef.current[widgetId];
+      if (!gridEl || !widgetEl) return;
+      const gridRect = gridEl.getBoundingClientRect();
+      const widgetRect = widgetEl.getBoundingClientRect();
+      const colWidth = gridRect.width / columns;
+      const gap = 16;
+      const width = nextSpan * colWidth + (nextSpan - 1) * gap;
+      setPreviewRect({
+        left: widgetRect.left - gridRect.left,
+        top: widgetRect.top - gridRect.top,
+        width,
+        height: widgetRect.height,
+      });
+    };
 
     const onMove = (ev: MouseEvent) => {
       if (!resizeStartRef.current) return;
       const dx = ev.clientX - resizeStartRef.current.x;
-      // Each column is roughly 1/columns of the container width. Approximate
-      // the column width from the grid element.
-      const gridEl = document.querySelector('.dashboard-grid-container') as HTMLElement | null;
+      const gridEl = gridRef.current;
       if (!gridEl) return;
       const colWidth = gridEl.clientWidth / columns;
       const delta = Math.round(dx / colWidth);
       const next = Math.max(1, Math.min(columns, resizeStartRef.current.startSpan + delta));
-      setResizePreview(next);
+      resizeCurrentRef.current = next;
+      computePreview(next);
     };
     const onUp = () => {
-      if (resizeStartRef.current && resizePreview !== null) {
-        handleResize(widgetId, resizePreview - resizeStartRef.current.startSpan);
+      if (resizeStartRef.current && resizeCurrentRef.current !== null) {
+        handleResize(widgetId, resizeCurrentRef.current - resizeStartRef.current.startSpan);
       }
       resizeStartRef.current = null;
+      resizeCurrentRef.current = null;
       setResizingId(null);
-      setResizePreview(null);
+      setPreviewRect(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -241,6 +263,8 @@ export function ConfigurableDashboard({
         return <NginxWidget title={item.title} response={svcResponse} loading={loading} />;
       case 'portainer':
         return <PortainerWidget title={item.title} response={svcResponse} loading={loading} />;
+      case 'nas':
+        return <NasWidget title={item.title} response={svcResponse} loading={loading} />;
       case 'plex': {
         const tautulliResp = Object.values(servicesStatus).find((s) => s.type === 'tautulli');
         return (
@@ -348,25 +372,29 @@ export function ConfigurableDashboard({
       </div>
 
       <div
+        ref={gridRef}
         className={`dashboard-grid-container cols-${columns} ${editMode ? 'edit-mode-active' : ''}`}
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gap: '16px',
+          position: 'relative',
         }}
       >
         {widgets.map((widget, idx) => {
           const colSpan = Math.min(columns, widget.colSpan || 1);
           const isDragging = dragIndex === idx;
           const isDragOver = dragOverIndex === idx && dragIndex !== null && dragIndex !== idx;
-          const isResizing = resizingId === widget.id;
 
           return (
             <div
               key={widget.id}
-              className={`dashboard-widget-wrapper col-span-${colSpan} ${
-                isDragging ? 'dragging' : ''
-              } ${isDragOver ? 'drag-over' : ''}`}
+              ref={(el) => {
+                widgetElsRef.current[widget.id] = el;
+              }}
+              className={`dashboard-widget-wrapper ${isDragging ? 'dragging' : ''} ${
+                isDragOver ? 'drag-over' : ''
+              }`}
               style={{
                 gridColumn: `span ${colSpan} / span ${colSpan}`,
               }}
@@ -425,14 +453,6 @@ export function ConfigurableDashboard({
                 </div>
               )}
 
-              {/* Resize preview shadow (snap target) */}
-              {isResizing && resizePreview !== null && resizePreview !== colSpan && (
-                <div
-                  className="resize-preview-shadow"
-                  style={{ gridColumn: `span ${resizePreview} / span ${resizePreview}` }}
-                />
-              )}
-
               {renderWidgetContent(widget)}
 
               {/* Pull-tag resize handle (semicircle) */}
@@ -448,6 +468,19 @@ export function ConfigurableDashboard({
             </div>
           );
         })}
+
+        {/* Resize preview overlay (snap target) */}
+        {resizingId && previewRect && (
+          <div
+            className="resize-preview-shadow"
+            style={{
+              left: previewRect.left,
+              top: previewRect.top,
+              width: previewRect.width,
+              height: previewRect.height,
+            }}
+          />
+        )}
       </div>
     </div>
   );
