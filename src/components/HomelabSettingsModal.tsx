@@ -831,6 +831,22 @@ function ServiceEditForm({
           </div>
         )}
 
+        {['portainer'].includes(editingService.type || '') && (
+          <div className="form-group">
+            <label>Environment ID (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. 1 (leave blank to auto-pick first)"
+              value={editingService.apiSecret || ''}
+              onChange={(e) => setEditingService({ ...editingService, apiSecret: e.target.value })}
+            />
+            <span className="form-hint">
+              If Portainer reports "Unable to find an environment", set this to the correct
+              environment ID from the URL (e.g. <code>#/endpoints/2</code> → 2).
+            </span>
+          </div>
+        )}
+
         {['ilo', 'peanut', 'unifi', 'nginx'].includes(editingService.type || '') && (
           <>
             <div className="form-group">

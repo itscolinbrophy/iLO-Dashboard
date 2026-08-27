@@ -100,6 +100,28 @@ export function NasWidget({ title = 'Synology NAS', response, loading }: NasWidg
             </div>
           </div>
 
+          {data?.storageTotalBytes ? (
+            <div className="nas-section">
+              <div className="nas-section-title">Storage</div>
+              <div className="nas-volume-row">
+                <div className="nas-volume-header">
+                  <span className="nas-volume-name">Total Storage</span>
+                  <span className="nas-volume-pct font-mono">{data.storageUsagePercent}%</span>
+                </div>
+                <div className="progress-bar-track">
+                  <div
+                    className={`progress-bar-fill ${data.storageUsagePercent > 85 ? 'danger' : data.storageUsagePercent > 70 ? 'warning' : 'accent'}`}
+                    style={{ width: `${Math.min(100, Math.max(0, data.storageUsagePercent))}%` }}
+                  />
+                </div>
+                <div className="nas-volume-details">
+                  <span className="nas-volume-used font-mono">{formatBytes(data.storageUsedBytes)}</span>
+                  <span className="text-muted">of {formatBytes(data.storageTotalBytes)}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {data?.volumes && data.volumes.length > 0 && (
             <div className="nas-section">
               <div className="nas-section-title">Storage Volumes</div>

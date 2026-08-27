@@ -1068,11 +1068,17 @@ export async function pollPortainer(service) {
 
   try {
     const endpoints = await httpRequestJson(`${base}/api/endpoints`, { headers, timeout: 6000 });
-    const ep = Array.isArray(endpoints) ? endpoints[0] : {};
-    const epId = ep.id || 1;
+    const epList = Array.isArray(endpoints) ? endpoints : [];
+    // Allow the user to pin a specific environment ID via the service's
+    // apiSecret field (numeric). Otherwise pick the first available endpoint.
+    const pinnedId = service.apiSecret ? Number(service.apiSecret) : null;
+    const ep = pinnedId
+      ? epList.find((e) => Number(e.id) === pinnedId) || epList[0] || {}
+      : epList[0] || {};
+    const epId = ep.id != null ? ep.id : 1;
 
     const [containersRes, infoRes] = await Promise.all([
-      httpRequestJson(`${base}/api/endpoints/${epId}/docker/containers/json?all=1`, { headers, timeout: 6000 }),
+      httpRequestJson(`${base}/api/endpoints/${epId}/docker/containers/json?all=1`, { headers, timeout: 6000 }).catch(() => []),
       httpRequestJson(`${base}/api/endpoints/${epId}/docker/info`, { headers, timeout: 6000 }).catch(() => ({})),
     ]);
 
@@ -1485,6 +1491,11 @@ export async function pollNginx(service) {
  * by storing the OTP in `service.apiKey` (the "API Key / Token" field) and
  * passing it as `otp_code` on the second login attempt.
  */
+// Cache DSM sessions keyed by serviceId so we only log in when the session
+// actually expires. This avoids re-entering the OTP code on every poll (which
+// would fail once the 2FA code rotates) and keeps constant access.
+const nasSessions = new Map();
+
 export async function pollNas(service) {
   const base = service.host.replace(/\/+$/, '');
   const username = (service.username || 'admin').trim();
@@ -1504,8 +1515,20 @@ export async function pollNas(service) {
     throw new Error(res?.error?.code ? `DSM login failed (code ${res.error.code})` : 'DSM login failed');
   }
 
-  async function apiCall(api, method, version, params = {}) {
+  // Get a valid session id, reusing the cached one and only re-logging in when
+  // it's missing or stale (DSM sessions typically last ~30 min).
+  async function getSid() {
+    const cached = nasSessions.get(service.id);
+    if (cached && Date.now() - cached.at < 25 * 60 * 1000) {
+      return cached.sid;
+    }
     const sid = await login();
+    nasSessions.set(service.id, { sid, at: Date.now() });
+    return sid;
+  }
+
+  async function apiCall(api, method, version, params = {}) {
+    const sid = await getSid();
     const query = new URLSearchParams({
       api,
       version: String(version),
@@ -1514,6 +1537,20 @@ export async function pollNas(service) {
       ...params,
     });
     const res = await httpRequestJson(`${base}/webapi/entry.cgi?${query.toString()}`, { timeout: 8000 });
+    // If the session expired, clear the cache and retry once with a fresh login.
+    if (!res?.success && (res?.error?.code === 106 || res?.error?.code === 401)) {
+      nasSessions.delete(service.id);
+      const freshSid = await getSid();
+      const retryQuery = new URLSearchParams({
+        api,
+        version: String(version),
+        method,
+        _sid: freshSid,
+        ...params,
+      });
+      const retry = await httpRequestJson(`${base}/webapi/entry.cgi?${retryQuery.toString()}`, { timeout: 8000 });
+      if (retry?.success) return retry.data;
+    }
     if (!res?.success) throw new Error(`DSM ${method} failed`);
     return res.data;
   }
@@ -1548,6 +1585,10 @@ export async function pollNas(service) {
     const memTotal = Number(resource?.memory?.total || 0);
     const memUsed = Number(resource?.memory?.real_used || 0);
 
+    // Aggregate storage totals across all volumes.
+    const totalStorageBytes = volumes.reduce((sum, v) => sum + v.totalBytes, 0);
+    const usedStorageBytes = volumes.reduce((sum, v) => sum + v.usedBytes, 0);
+
     return {
       model: sysInfo?.model || 'Synology RS819',
       hostname: sysInfo?.hostname || service.name || 'NAS',
@@ -1559,6 +1600,9 @@ export async function pollNas(service) {
       memTotalBytes: memTotal,
       tempCelsius: disks.length ? Math.max(...disks.map((d) => d.tempCelsius ?? 0)) : null,
       status: disks.some((d) => d.status === 'critical') ? 'critical' : 'healthy',
+      storageUsedBytes: usedStorageBytes,
+      storageTotalBytes: totalStorageBytes,
+      storageUsagePercent: totalStorageBytes ? Math.round((usedStorageBytes / totalStorageBytes) * 100) : 0,
       volumes,
       disks,
     };
@@ -1575,6 +1619,9 @@ export async function pollNas(service) {
         memTotalBytes: 3_200_000_000,
         tempCelsius: 41,
         status: 'healthy',
+        storageUsedBytes: 2_400_000_000_000,
+        storageTotalBytes: 4_000_000_000_000,
+        storageUsagePercent: 60,
         volumes: [
           { name: 'volume1', status: 'normal', usedBytes: 2_400_000_000_000, totalBytes: 4_000_000_000_000, usagePercent: 60 },
         ],

@@ -429,6 +429,9 @@ export interface NasStatus {
   memTotalBytes: number;
   tempCelsius: number | null;
   status: string; // healthy, degraded, offline
+  storageUsedBytes: number;
+  storageTotalBytes: number;
+  storageUsagePercent: number;
   volumes: Array<{
     name: string;
     status: string;
