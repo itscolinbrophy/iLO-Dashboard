@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Icon } from './common/Icon';
 import { QuickLinksWidget } from './widgets/QuickLinksWidget';
 import { PeanutWidget } from './widgets/PeanutWidget';
@@ -65,6 +65,16 @@ export function ConfigurableDashboard({
   const [editMode, setEditMode] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
 
+  // Drag-and-drop state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Resize state
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizePreview, setResizePreview] = useState<number | null>(null);
+  const resizeStartRef = useRef<{ x: number; startSpan: number } | null>(null);
+
   const widgets = config.dashboardLayout.widgets || [];
   const columns = config.dashboardLayout.columns || 3;
 
@@ -110,7 +120,84 @@ export function ConfigurableDashboard({
     setShowAddMenu(false);
   };
 
-  /* Render specific widget card */
+  /* ---------------- Drag & Drop ---------------- */
+
+  const handleDragStart = (index: number) => (e: React.DragEvent) => {
+    if (!editMode) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    // Delay the drag image so the ghost doesn't look broken.
+    requestAnimationFrame(() => {
+      e.dataTransfer.setDragImage(new Image(), 0, 0);
+    });
+  };
+
+  const handleDragOver = (index: number) => (e: React.DragEvent) => {
+    if (!editMode || dragIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (index !== dragOverIndex) setDragOverIndex(index);
+  };
+
+  const handleDrop = (targetIndex: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === targetIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const updated = [...widgets];
+    const [moved] = updated.splice(dragIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+    onUpdateLayout({ ...config.dashboardLayout, widgets: updated });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  /* ---------------- Resize (pull-tag) ---------------- */
+
+  const startResize = (widgetId: string, startSpan: number) => (e: React.MouseEvent) => {
+    if (!editMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizeStartRef.current = { x: e.clientX, startSpan };
+    setResizingId(widgetId);
+    setResizePreview(startSpan);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizeStartRef.current) return;
+      const dx = ev.clientX - resizeStartRef.current.x;
+      // Each column is roughly 1/columns of the container width. Approximate
+      // the column width from the grid element.
+      const gridEl = document.querySelector('.dashboard-grid-container') as HTMLElement | null;
+      if (!gridEl) return;
+      const colWidth = gridEl.clientWidth / columns;
+      const delta = Math.round(dx / colWidth);
+      const next = Math.max(1, Math.min(columns, resizeStartRef.current.startSpan + delta));
+      setResizePreview(next);
+    };
+    const onUp = () => {
+      if (resizeStartRef.current && resizePreview !== null) {
+        handleResize(widgetId, resizePreview - resizeStartRef.current.startSpan);
+      }
+      resizeStartRef.current = null;
+      setResizingId(null);
+      setResizePreview(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  /* Render specific widget content */
   const renderWidgetContent = (item: WidgetLayoutItem) => {
     const svcResponse = item.serviceId
       ? servicesStatus[item.serviceId]
@@ -270,14 +357,24 @@ export function ConfigurableDashboard({
       >
         {widgets.map((widget, idx) => {
           const colSpan = Math.min(columns, widget.colSpan || 1);
+          const isDragging = dragIndex === idx;
+          const isDragOver = dragOverIndex === idx && dragIndex !== null && dragIndex !== idx;
+          const isResizing = resizingId === widget.id;
 
           return (
             <div
               key={widget.id}
-              className={`dashboard-widget-wrapper col-span-${colSpan}`}
+              className={`dashboard-widget-wrapper col-span-${colSpan} ${
+                isDragging ? 'dragging' : ''
+              } ${isDragOver ? 'drag-over' : ''}`}
               style={{
                 gridColumn: `span ${colSpan} / span ${colSpan}`,
               }}
+              draggable={editMode}
+              onDragStart={handleDragStart(idx)}
+              onDragOver={handleDragOver(idx)}
+              onDrop={handleDrop(idx)}
+              onDragEnd={handleDragEnd}
             >
               {editMode && (
                 <div className="widget-edit-controls-bar">
@@ -327,7 +424,27 @@ export function ConfigurableDashboard({
                   </div>
                 </div>
               )}
+
+              {/* Resize preview shadow (snap target) */}
+              {isResizing && resizePreview !== null && resizePreview !== colSpan && (
+                <div
+                  className="resize-preview-shadow"
+                  style={{ gridColumn: `span ${resizePreview} / span ${resizePreview}` }}
+                />
+              )}
+
               {renderWidgetContent(widget)}
+
+              {/* Pull-tag resize handle (semicircle) */}
+              {editMode && (
+                <div
+                  className="widget-resize-tag"
+                  title="Drag to resize"
+                  onMouseDown={startResize(widget.id, colSpan)}
+                >
+                  <Icon name="maximize" size={12} />
+                </div>
+              )}
             </div>
           );
         })}

@@ -64,6 +64,60 @@ const SSH_TIMEOUT_MS = 15_000;
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 /* ------------------------------------------------------------------ */
+/* SSH key store for passwordless terminal access                     */
+/* ------------------------------------------------------------------ */
+// A single Ed25519 keypair is generated on first use and stored on disk
+// (gitignored). The public key can be installed into the PVE host's
+// ~/.ssh/authorized_keys so the dashboard can open terminals without
+// prompting for credentials every time.
+const SSH_KEY_DIR = path.join(__dirname, 'ssh-keys');
+const SSH_PRIV_KEY = path.join(SSH_KEY_DIR, 'id_ed25519');
+const SSH_PUB_KEY = path.join(SSH_KEY_DIR, 'id_ed25519.pub');
+
+function ensureSshKey() {
+  try {
+    if (fs.existsSync(SSH_PRIV_KEY) && fs.existsSync(SSH_PUB_KEY)) {
+      return {
+        privateKey: fs.readFileSync(SSH_PRIV_KEY, 'utf8'),
+        publicKey: fs.readFileSync(SSH_PUB_KEY, 'utf8'),
+      };
+    }
+    fs.mkdirSync(SSH_KEY_DIR, { recursive: true });
+    const { generateKeyPairSync } = crypto;
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519', {
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    // Convert the SPKI PEM to the OpenSSH authorized_keys format.
+    const pubOpenSsh = pemToOpenSsh(publicKey, 'dashboard@ilo');
+    fs.writeFileSync(SSH_PRIV_KEY, privateKey, { mode: 0o600 });
+    fs.writeFileSync(SSH_PUB_KEY, pubOpenSsh + '\n');
+    return { privateKey, publicKey: pubOpenSsh };
+  } catch (err) {
+    console.error('Failed to ensure SSH key:', err);
+    return null;
+  }
+}
+
+/** Convert an SPKI PEM public key to the OpenSSH authorized_keys format. */
+function pemToOpenSsh(pem, comment) {
+  const base64 = pem
+    .replace('-----BEGIN PUBLIC KEY-----', '')
+    .replace('-----END PUBLIC KEY-----', '')
+    .replace(/\s+/g, '');
+  const der = Buffer.from(base64, 'base64');
+  // Ed25519 SPKI: 12-byte header + 32-byte raw key.
+  const raw = der.subarray(der.length - 32);
+  const sshKey = Buffer.concat([
+    Buffer.from([0, 0, 0, 11]),
+    Buffer.from('ssh-ed25519'),
+    Buffer.from([0, 0, 0, 32]),
+    raw,
+  ]);
+  return `ssh-ed25519 ${sshKey.toString('base64')} ${comment}`;
+}
+
+/* ------------------------------------------------------------------ */
 /* Static file serving (production)                                    */
 /* ------------------------------------------------------------------ */
 
@@ -376,7 +430,7 @@ const SSH_ALGOS = {
  * For LXC containers we SSH to the PVE host and run `pct enter <vmid>`;
  * for QEMU VMs we open a shell on the PVE host (user can then `qm terminal`).
  */
-function bridgeSshShell(ws, { host, port = 22, username, password, command }) {
+function bridgeSshShell(ws, { host, port = 22, username, password, privateKey, command }) {
   const conn = new Client();
   let stream = null;
 
@@ -421,7 +475,8 @@ function bridgeSshShell(ws, { host, port = 22, username, password, command }) {
     host,
     port: Number(port) || 22,
     username,
-    password,
+    ...(password ? { password } : {}),
+    ...(privateKey ? { privateKey } : {}),
     readyTimeout: 15000,
     algorithms: SSH_ALGOS,
   });
@@ -902,6 +957,15 @@ const server = http.createServer(async (req, res) => {
       if (body.theme) cfg.theme = body.theme;
       saveHomelabConfig(cfg);
       return sendJson(res, 200, { ok: true, layout: cfg.dashboardLayout });
+    }
+
+    // GET /api/ssh-key — return (or generate) the dashboard's SSH public key
+    // so it can be installed into a PVE host's authorized_keys for passwordless
+    // terminal access.
+    if (req.method === 'GET' && url.pathname === '/api/ssh-key') {
+      const key = ensureSshKey();
+      if (!key) return sendJson(res, 500, { error: 'Failed to generate SSH key' });
+      return sendJson(res, 200, { ok: true, publicKey: key.publicKey.trim() });
     }
 
     // GET /api/quicklinks
@@ -1472,11 +1536,13 @@ server.on('upgrade', (req, socket, head) => {
 
   const username = url.searchParams.get('username') || service.username || 'root';
   const password = url.searchParams.get('password') || service.password || '';
+  // Prefer the dashboard's SSH key for passwordless auth when available.
+  const sshKey = ensureSshKey();
 
   wss.handleUpgrade(req, socket, head, (ws) => {
-    // If neither the request nor the stored service config carries an SSH
-    // password, ask the browser for credentials instead of failing blindly.
-    if (!password) {
+    // If there's no stored password AND no SSH key, ask the browser for
+    // credentials instead of failing blindly.
+    if (!password && !sshKey) {
       ws.once('message', (raw) => {
         try {
           const creds = JSON.parse(raw.toString());
@@ -1509,6 +1575,13 @@ server.on('upgrade', (req, socket, head) => {
       : node
         ? `ssh -o StrictHostKeyChecking=no root@${node}`
         : undefined;
-    bridgeSshShell(ws, { host: sshHost, port: 22, username, password, command });
+    bridgeSshShell(ws, {
+      host: sshHost,
+      port: 22,
+      username,
+      password,
+      privateKey: sshKey?.privateKey,
+      command,
+    });
   });
 });

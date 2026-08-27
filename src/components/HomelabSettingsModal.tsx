@@ -19,6 +19,7 @@ import {
   addQuickLink,
   updateQuickLink,
   deleteQuickLink,
+  fetchSshKey,
 } from '../api/homelabClient';
 
 interface SettingsModalProps {
@@ -99,6 +100,37 @@ export function HomelabSettingsModal({
   // Quick link form state
   const [editingLink, setEditingLink] = useState<Partial<QuickLink> | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  // SSH key state
+  const [sshKey, setSshKey] = useState<string | null>(null);
+  const [sshKeyLoading, setSshKeyLoading] = useState(false);
+  const [sshKeyCopied, setSshKeyCopied] = useState(false);
+
+  /* ---------------- SSH Key Handlers ---------------- */
+
+  const loadSshKey = async () => {
+    setSshKeyLoading(true);
+    try {
+      const res = await fetchSshKey();
+      setSshKey(res.publicKey);
+    } catch (err: any) {
+      setSshKey(null);
+      setLinkError(err.message || 'Failed to load SSH key');
+    } finally {
+      setSshKeyLoading(false);
+    }
+  };
+
+  const copySshKey = async () => {
+    if (!sshKey) return;
+    try {
+      await navigator.clipboard.writeText(sshKey);
+      setSshKeyCopied(true);
+      setTimeout(() => setSshKeyCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
 
   /* ---------------- Service Handlers ---------------- */
 
@@ -634,6 +666,38 @@ export function HomelabSettingsModal({
           {tab === 'ilo' && (
             <div className="settings-tab-pane">
               <EndpointManager endpoints={endpoints} onChange={onEndpointsChange} />
+
+              <div className="ssh-key-panel">
+                <div className="pane-header-row">
+                  <div>
+                    <h3>Passwordless Terminal Access (SSH Key)</h3>
+                    <p className="subtext">
+                      Install this public key into your Proxmox host's{' '}
+                      <code>~/.ssh/authorized_keys</code> so the dashboard can open
+                      LXC/VM terminals without asking for credentials every time.
+                    </p>
+                  </div>
+                </div>
+                {sshKeyLoading ? (
+                  <p className="text-muted">Loading SSH key…</p>
+                ) : sshKey ? (
+                  <div className="ssh-key-box">
+                    <code className="ssh-key-text">{sshKey}</code>
+                    <button className="btn sm secondary" onClick={copySshKey}>
+                      <Icon name="copy" size={14} />
+                      {sshKeyCopied ? 'Copied!' : 'Copy Key'}
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn secondary" onClick={loadSshKey}>
+                    Generate SSH Key
+                  </button>
+                )}
+                <p className="ssh-key-hint">
+                  On the PVE host run:{' '}
+                  <code>mkdir -p ~/.ssh && echo "&lt;paste key&gt;" &gt;&gt; ~/.ssh/authorized_keys</code>
+                </p>
+              </div>
             </div>
           )}
         </div>

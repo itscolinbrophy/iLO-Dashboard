@@ -18,6 +18,8 @@ server/endpoints.json
 server/homelab-config.json
 # Telemetry history cache (never commit)
 server/history/
+# SSH keys for passwordless terminal access (never commit)
+server/ssh-keys/
 
 # Editor directories and files
 .vscode/*

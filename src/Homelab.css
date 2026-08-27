@@ -326,6 +326,55 @@
   border-radius: var(--radius);
   padding: 6px;
   background: rgba(56, 189, 248, 0.02);
+  cursor: grab;
+}
+
+.edit-mode-active .dashboard-widget-wrapper:active {
+  cursor: grabbing;
+}
+
+.dashboard-widget-wrapper.dragging {
+  opacity: 0.4;
+}
+
+.dashboard-widget-wrapper.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+/* Resize pull-tag (semicircle in bottom-right) */
+.widget-resize-tag {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px 0 0 0;
+  background: var(--accent);
+  color: #04121f;
+  display: grid;
+  place-items: center;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 5;
+  box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.3);
+}
+.edit-mode-active .dashboard-widget-wrapper:hover .widget-resize-tag,
+.widget-resize-tag:hover {
+  opacity: 1;
+}
+
+/* Resize preview shadow (snap target) */
+.resize-preview-shadow {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: rgba(56, 189, 248, 0.12);
+  pointer-events: none;
+  z-index: 4;
 }
 
 .widget-edit-controls-bar {
@@ -2196,6 +2245,50 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+
+/* SSH key panel (passwordless terminal access) */
+.ssh-key-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ssh-key-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.ssh-key-text {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: all;
+}
+
+.ssh-key-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+.ssh-key-hint code {
+  background: var(--bg-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--accent);
 }
 
 .settings-form {

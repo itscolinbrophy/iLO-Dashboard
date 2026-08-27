@@ -295,6 +295,13 @@ export function Icon({ name, size = 18, className = '' }: IconProps) {
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       );
+    case 'copy':
+      return (
+        <svg {...strokeProps}>
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      );
     case 'x':
     case 'close':
       return (

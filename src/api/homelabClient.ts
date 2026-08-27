@@ -81,6 +81,12 @@ export function testService(id: string): Promise<ServiceDataResponse> {
   return request(`/services/${id}/test`, { method: 'POST' });
 }
 
+/* ---------------- SSH Key (passwordless terminals) ---------------- */
+
+export function fetchSshKey(): Promise<{ ok: boolean; publicKey: string }> {
+  return request('/ssh-key');
+}
+
 /** Send a power action to a Proxmox VE VM/LXC. */
 export function sendPvePowerAction(
   id: string,
